@@ -11,6 +11,51 @@
     return n;
   }
 
+  /* ---------- 머리의 로그인 · 닉네임 · 로그아웃 ----------
+     로그인 전에는 ‘로그인’ 버튼, 로그인하면 카카오 닉네임과 ‘로그아웃’이 보인다.
+     로그인 정보는 로그인 뒤 화면(app/)과 같은 자리(localStorage의 rn_session)에 둔다.
+     route()보다 먼저 돌아야 한다(카카오에서 돌아온 주소의 #access_token 을 치우기 위해). */
+  var ACCT_STORE = "rn_session";
+  function acctSession() { try { return JSON.parse(localStorage.getItem(ACCT_STORE)); } catch (e) { return null; } }
+  function acctNick(sess) {
+    try {
+      var b = sess.access_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      var c = JSON.parse(decodeURIComponent(escape(atob(b)))), m = c.user_metadata || {};
+      return m.name || m.full_name || m.nickname || m.user_name || m.preferred_username || "내 상담";
+    } catch (e) { return null; }
+  }
+  (function () {
+    if (location.hash.indexOf("access_token=") === -1 && location.hash.indexOf("error=") === -1) return;
+    var p = new URLSearchParams(location.hash.slice(1));
+    history.replaceState(null, "", location.pathname + location.search);
+    if (p.get("access_token")) {
+      try { localStorage.setItem(ACCT_STORE, JSON.stringify({ access_token: p.get("access_token"), refresh_token: p.get("refresh_token"), expires_at: Number(p.get("expires_at")) })); } catch (e) { /* 저장 못 하면 로그인 전 상태로 보인다 */ }
+    }
+  })();
+  function drawAcct() {
+    var box = $("acct");
+    if (!box || !CONFIG.supabaseUrl) return;
+    box.textContent = "";
+    var sess = acctSession(), nick = sess && sess.access_token ? acctNick(sess) : null;
+    if (!nick) {
+      var inBtn = el("button", "acct-btn", "로그인"); inBtn.type = "button";
+      inBtn.addEventListener("click", function () {
+        location.href = CONFIG.supabaseUrl + "/auth/v1/authorize?provider=kakao&redirect_to=" + encodeURIComponent(location.origin + location.pathname);
+      });
+      box.appendChild(inBtn);
+      return;
+    }
+    var me = el("a", "acct-name", nick + " 님"); me.href = "app/index.html"; me.title = "내 상담 화면으로 가기";
+    var out = el("button", "acct-out", "로그아웃"); out.type = "button";
+    out.addEventListener("click", function () {
+      try { localStorage.removeItem(ACCT_STORE); } catch (e) { /* 그래도 화면은 바꾼다 */ }
+      fetch(CONFIG.supabaseUrl + "/auth/v1/logout", { method: "POST", headers: { apikey: CONFIG.supabaseKey, Authorization: "Bearer " + sess.access_token } }).then(null, function () {});
+      drawAcct();
+    });
+    box.appendChild(me); box.appendChild(out);
+  }
+  drawAcct();
+
   /* ---------- 메뉴: 누른 메뉴의 화면만 보여 준다 ----------
      주소 뒤의 #이름으로 화면을 고른다(뒤로 가기가 되고, 그 화면의 주소를 그대로 보낼 수 있다).
      자바스크립트가 꺼져 있으면 모든 구역이 한 페이지로 이어져 보인다. */
@@ -329,7 +374,7 @@
   var MESSAGES = {
     NAME: "이름을 확인해 주세요.", PHONE: "휴대폰 번호를 확인해 주세요.", CONSENT: "동의가 필요합니다.", WHEN: "날짜와 시간을 골라 주세요.",
     TAKEN: "방금 그 시간이 찼습니다. 다른 시간을 골라 주세요.",
-    LIMIT_PHONE: "같은 번호로는 하루에 세 번까지 신청할 수 있습니다.", LIMIT_ALL: "신청이 몰리고 있습니다. 잠시 뒤 다시 시도해 주세요."
+    LIMIT_PHONE: "같은 번호로는 하루에 다섯 번까지 신청할 수 있습니다.", LIMIT_ALL: "신청이 몰리고 있습니다. 잠시 뒤 다시 시도해 주세요."
   };
   var sending = false;
   form.addEventListener("submit", function (e) {
@@ -351,19 +396,50 @@
     var btn = form.querySelector('button[type="submit"]');
     sending = true; btn.disabled = true; btn.textContent = "보내는 중…";
     var at = pickedAt;
-    sb("rpc/book_consult", { method: "POST", body: JSON.stringify({
+    var payload = {
       p_start: at.toISOString(), p_name: name, p_phone: digits, p_topics: topics, p_channel: $("f-ch").value || null,
       p_check: checked.length ? checked.join(" / ") : null,
       p_place: $("f-place").value.trim() || null, p_memo: $("f-memo").value.trim() || null, p_consent: CONSENT_VERSION
-    }) }).then(function () {
-      $("doneTitle").textContent = "예약이 접수됐습니다";
-      $("doneText").textContent = fmtDay.format(at) + " " + fmtTime.format(at) + "에 잡아 두었습니다. 장소는 남겨 주신 번호로 연락드려 함께 정합니다.";
-      form.hidden = true; done.hidden = false; done.focus();
-      form.reset(); pickedAt = null; pickedHour = null; pickedDay = null;
+    };
+    var when = fmtDay.format(at) + " " + fmtTime.format(at);
+    function send(replace) {
+      payload.p_replace = !!replace;
+      return sb("rpc/book_consult", { method: "POST", body: JSON.stringify(payload) }).then(function (res) {
+        var from = res && res.moved_from ? new Date(res.moved_from) : null;
+        $("doneTitle").textContent = from ? "예약 시간을 바꿨습니다" : "예약이 접수됐습니다";
+        $("doneText").textContent = (from ? "앞의 예약(" + fmtDay.format(from) + " " + fmtTime.format(from) + ")은 취소했습니다. " : "")
+          + when + "에 잡아 두었습니다. 장소는 남겨 주신 번호로 연락드려 함께 정합니다.";
+        form.hidden = true; done.hidden = false; done.focus();
+        form.reset(); pickedAt = null; pickedHour = null; pickedDay = null;
+      }, function (err) {
+        var box = $("e-send");
+        if (/^HAVE:/.test(err.code || "")) {
+          // 같은 이름 · 연락처로 잡힌 예약이 있다 → 바꿀지 묻는다
+          var old = new Date(err.code.slice(5));
+          if (confirm("이미 " + fmtDay.format(old) + " " + fmtTime.format(old) + " 예약이 있습니다.\n" + when + "(으)로 바꿀까요?\n바꾸면 앞의 예약은 취소됩니다.")) return send(true);
+          box.textContent = "예약을 바꾸지 않았습니다. 앞의 예약(" + fmtDay.format(old) + " " + fmtTime.format(old) + ")은 그대로입니다."; box.hidden = false;
+          return;
+        }
+        box.textContent = MESSAGES[err.code] || "보내지 못했습니다. 잠시 뒤 다시 시도해 주세요."; box.hidden = false;
+        if (err.code === "TAKEN") { pickedAt = null; loadSlots(); }
+      });
+    }
+    send(false).then(function () { sending = false; btn.disabled = false; btn.textContent = "상담 신청하기"; });
+  });
+
+  /* 예약 취소: 예약할 때 쓴 이름과 연락처가 모두 맞아야 한다 */
+  $("c-go").addEventListener("click", function () {
+    var msg = $("c-msg"), n = $("c-name").value.trim(), t = $("c-tel").value.replace(/\D/g, "");
+    function say(text, ok) { msg.textContent = text; msg.className = ok ? "cal-picked" : "err"; msg.hidden = false; }
+    if (!n || !/^01\d{8,9}$/.test(t)) return say("예약할 때 쓴 이름과 휴대폰 번호를 적어 주세요.");
+    if (!confirm("예약을 취소할까요?")) return;
+    sb("rpc/cancel_my_booking", { method: "POST", body: JSON.stringify({ p_name: n, p_phone: t }) }).then(function (res) {
+      var d = new Date(res.starts_at);
+      say(fmtDay.format(d) + " " + fmtTime.format(d) + " 예약을 취소했습니다.", true);
+      $("c-name").value = ""; $("c-tel").value = ""; loadSlots();
     }, function (err) {
-      var box = $("e-send"); box.textContent = MESSAGES[err.code] || "보내지 못했습니다. 잠시 뒤 다시 시도해 주세요."; box.hidden = false;
-      if (err.code === "TAKEN") { pickedAt = null; loadSlots(); }
-    }).then(function () { sending = false; btn.disabled = false; btn.textContent = "상담 신청하기"; });
+      say(err.code === "NOT_FOUND" ? "그 이름과 연락처로 된 예약을 찾지 못했습니다. 예약할 때 적은 그대로 적어 주세요." : "취소하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+    });
   });
 
   $("doneBack").addEventListener("click", function () {

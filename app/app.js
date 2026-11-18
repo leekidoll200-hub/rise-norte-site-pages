@@ -144,7 +144,7 @@
   function viewSignedOut(msg) {
     show(el("section", { class: "panel" }, [
       el("h1", { text: "상담 고객 화면" }),
-      el("p", { class: "muted", text: "상담 고객 전용 화면입니다. 카카오로 로그인하면 내 자료만 볼 수 있습니다." }),
+      el("p", { class: "muted", text: "상담 고객 전용 화면입니다. 카카오로 로그인하면 상담 동의와 후기 작성, 사전 작성지를 쓸 수 있고 내 자료만 볼 수 있습니다." }),
       msg ? el("p", { class: "msg bad", text: msg }) : null,
       el("button", { class: "btn btn-kakao btn-wide", type: "button", onclick: login, text: "카카오로 로그인" }),
       el("p", { class: "src", text: "로그인할 때 카카오가 닉네임 · 프로필 사진 · 이메일 제공 동의를 묻습니다. 계정을 확인하는 데만 쓰고 다른 곳에 주지 않습니다." })
@@ -650,16 +650,42 @@
           rest("DELETE", "bookings?id=eq." + b.id).then(reload, oops);
         };
       }
+      function cancelBooking(b) {
+        return function () {
+          if (!confirm(b.name + " 님의 예약을 취소합니다. 그 시간은 다시 예약할 수 있게 열립니다. 취소 사실은 고객에게 직접 알려 주세요. 취소할까요?")) return;
+          rest("PATCH", "bookings?id=eq." + b.id, { status: "cancelled" }).then(reload, oops);
+        };
+      }
       function bookingRow(b) {
         var when = b.starts_at ? KST_TIME.format(new Date(b.starts_at)) + " · " + (b.minutes || rule.minutes || 90) + "분" : "시간을 고르지 않음";
-        return el("div", { class: "wide" }, [
+        var cancelled = b.status === "cancelled";
+        // 시간 바꾸기: 누르면 날짜 · 시간 칸이 펼쳐진다
+        var at = b.starts_at ? new Date(b.starts_at) : null;
+        var mDate = el("input", { type: "date", value: at ? KST_KEY.format(at) : "", "aria-label": "새 날짜" });
+        var hm = at ? new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(at) : "";
+        var mTime = el("input", { type: "time", step: "600", value: hm, "aria-label": "새 시간" });
+        var mover = el("div", { class: "mover", hidden: true }, [
+          el("div", { style: "display:flex;flex-wrap:wrap;gap:8px;align-items:center" }, [mDate, mTime,
+            el("button", {
+              class: "btn btn-main", type: "button", text: "이 시간으로 옮기기", onclick: function () {
+                if (!mDate.value || !/^\d\d:\d0$/.test(mTime.value)) return oops(new Error("날짜와 시간을 확인해 주세요. 시간은 10분 단위입니다."));
+                rest("POST", "rpc/move_booking", { p_id: b.id, p_start: new Date(mDate.value + "T" + mTime.value + ":00+09:00").toISOString() })
+                  .then(reload, function (e) { oops(new Error(e.message === "TAKEN" ? "그 시간에 다른 예약이 있습니다." : e.message)); });
+              }
+            })]),
+          el("p", { class: "src", text: "옮긴 시간은 고객에게 직접 알려 주세요. 기본으로 여는 시간 밖으로도 옮길 수 있습니다." })
+        ]);
+        return el("div", { class: "wide" + (cancelled ? " blocked" : "") }, [
           el("label", { text: when + " · " + (BOOK_STATUS[b.status] || b.status) }),
           bookingBox(b),
           el("div", { style: "display:flex;flex-wrap:wrap;gap:12px" }, [
             b.status === "new" ? el("button", { class: "link-btn", type: "button", text: "확정으로 표시", onclick: setStatus(b, "confirmed") }) : null,
-            b.status !== "done" ? el("button", { class: "link-btn", type: "button", text: "상담함으로 표시", onclick: setStatus(b, "done") }) : null,
+            !cancelled && b.status !== "done" ? el("button", { class: "link-btn", type: "button", text: "상담함으로 표시", onclick: setStatus(b, "done") }) : null,
+            el("button", { class: "link-btn", type: "button", text: cancelled ? "다시 잡기 (시간 정하기)" : "시간 바꾸기", onclick: function () { mover.hidden = !mover.hidden; } }),
+            !cancelled && b.status !== "done" ? el("button", { class: "link-btn", type: "button", text: "예약 취소", onclick: cancelBooking(b) }) : null,
             el("button", { class: "link-btn", type: "button", text: "신청 지우기", onclick: removeBooking(b) })
-          ])
+          ]),
+          mover
         ]);
       }
       function dayBoxes(list, into) {
@@ -672,8 +698,10 @@
         });
       }
       var cut = Date.now() - 24 * 3600 * 1000;
-      var coming = bookings.filter(function (b) { return !b.starts_at || new Date(b.starts_at).getTime() >= cut; });
-      var past = bookings.filter(function (b) { return b.starts_at && new Date(b.starts_at).getTime() < cut; }).reverse();
+      var live = bookings.filter(function (b) { return b.status !== "cancelled"; });
+      var gone = bookings.filter(function (b) { return b.status === "cancelled"; });
+      var coming = live.filter(function (b) { return !b.starts_at || new Date(b.starts_at).getTime() >= cut; });
+      var past = live.filter(function (b) { return b.starts_at && new Date(b.starts_at).getTime() < cut; }).reverse();
       var listBox = el("div", { class: "panel" }, [el("h2", { text: "들어온 예약" })]);
       if (!coming.length) listBox.appendChild(el("p", { class: "muted", text: "아직 들어온 예약이 없습니다. 예약이 들어오면 휴대폰 알림이 오고 여기에 나타납니다." }));
       dayBoxes(coming, listBox);
@@ -681,6 +709,11 @@
         var pastBox = el("details", {}, [el("summary", { class: "link-btn", text: "지난 예약 " + past.length + "건 보기" })]);
         dayBoxes(past, pastBox);
         listBox.appendChild(pastBox);
+      }
+      if (gone.length) {
+        var goneBox = el("details", {}, [el("summary", { class: "link-btn", text: "취소된 예약 " + gone.length + "건 보기" })]);
+        dayBoxes(gone, goneBox);
+        listBox.appendChild(goneBox);
       }
 
       /* 막기: 일정이 생긴 시간 · 하루 · 여러 날 */
@@ -783,7 +816,7 @@
 
       return el("section", { style: "display:grid;gap:24px" }, [
         el("h1", { text: "예약 관리" }), msg, listBox, blocker, opener,
-        el("p", { class: "src", text: "새 신청이 오면 휴대폰 알림 앱(ntfy)으로 날짜와 시간만 알려 줍니다. 이름 · 연락처 · 희망 장소는 이 화면에서 확인해 주세요. 상담으로 이어지지 않은 신청은 ‘신청 지우기’로 지웁니다." })
+        el("p", { class: "src", text: "새 신청이 오면 휴대폰 알림 앱(ntfy)으로 날짜와 시간만 알려 줍니다. 이름 · 연락처 · 희망 장소는 이 화면에서 확인해 주세요. 고객이 시간을 바꾸거나 취소해도 알림이 옵니다. ‘예약 취소’는 기록을 남기고 시간만 다시 열고, ‘신청 지우기’는 이름과 연락처까지 지웁니다. 상담으로 이어지지 않은 신청은 ‘신청 지우기’로 지웁니다." })
       ]);
     });
   }
@@ -801,7 +834,9 @@
     rest("GET", "profiles?id=eq." + uid()).then(function (rows) {
       var me = rows[0];
       if (!me) throw new Error("계정 정보가 없습니다. 담당 자산관리사에게 알려 주세요.");
-      document.getElementById("who").textContent = (me.display_name || "") + (me.role === "advisor" ? " 담당자" : "");
+      var nick = me.display_name;
+      if (!nick) { try { var m = JSON.parse(decodeURIComponent(escape(atob(session.access_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))))).user_metadata || {}; nick = m.name || m.full_name || m.nickname || m.user_name || ""; } catch (e) { nick = ""; } }
+      document.getElementById("who").textContent = (nick ? nick + " 님" : "") + (me.role === "advisor" ? " · 담당자" : "");
       return rest("GET", "consents?client_id=eq." + me.id + "&kind=eq.collect&order=decided_at.desc&limit=1").then(function (c) {
         var enter = function () {
           if (me.role === "advisor") return viewAdvisor(me);

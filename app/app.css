@@ -128,3 +128,7 @@ details.panel[open] > summary { margin-bottom: var(--space-4); }
 .panel details > summary.link-btn { cursor: pointer; list-style: none; display: inline-block; }
 .panel details[open] { display: grid; gap: var(--space-4); }
 .tabs { flex-wrap: wrap; }
+/* 예약: 시간 바꾸기 칸 */
+.mover { display: grid; gap: 8px; padding-top: 4px; }
+.mover[hidden] { display: none; }
+.mover input { max-width: 170px; }
