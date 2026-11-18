@@ -14,8 +14,8 @@
   /* ---------- 메뉴: 누른 메뉴의 화면만 보여 준다 ----------
      주소 뒤의 #이름으로 화면을 고른다(뒤로 가기가 되고, 그 화면의 주소를 그대로 보낼 수 있다).
      자바스크립트가 꺼져 있으면 모든 구역이 한 페이지로 이어져 보인다. */
-  var VIEW_OF = { home: "home", quick: "home", check: "check", how: "how", why: "how", cases: "cases", faq: "faq", apply: "apply" };
-  var TITLES = { home: "재무설계 상담", check: "30초 자가 점검", how: "진행 방식", cases: "상담 사례", faq: "자주 묻는 질문", apply: "상담 신청" };
+  var VIEW_OF = { home: "home", quick: "home", check: "check", how: "how", why: "how", cases: "cases", faq: "faq", apply: "apply", privacy: "privacy" };
+  var TITLES = { home: "재무설계 상담", check: "30초 자가 점검", how: "진행 방식", cases: "상담 사례", faq: "자주 묻는 질문", apply: "상담 신청", privacy: "개인정보 처리방침" };
   var views = document.querySelectorAll("[data-view]");
   function route(first) {
     var id = (location.hash || "#home").slice(1);

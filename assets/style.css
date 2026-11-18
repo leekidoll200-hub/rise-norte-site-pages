@@ -267,6 +267,7 @@ input:focus, select:focus { outline: none; border-color: var(--ink); box-shadow:
 .cta-band p { color: var(--on-hero-muted); margin: var(--space-4) 0 var(--space-10); font-size: 17px; }
 .foot { background: var(--hero-bg); color: var(--on-hero); padding: 48px 0 56px; border-top: 1px solid var(--hero-line); }
 .brand-foot { margin-bottom: var(--space-2); }
+.foot a { color: var(--hero-accent-strong); text-underline-offset: 3px; }
 .foot-s { font-size: 13px; line-height: 20px; color: var(--on-hero-muted); margin-top: var(--space-2); }
 .float-cta { display: none; }
 body[data-view="apply"] .float-cta { display: none; }
@@ -340,3 +341,11 @@ body[data-view="apply"] .float-cta { display: none; }
 .cal-wish { display: grid; gap: 6px; }
 .link { justify-self: start; background: none; border: 0; padding: 4px 0; font: inherit; font-size: 14px; color: var(--accent); text-decoration: underline; cursor: pointer; }
 @media (max-width: 640px) { .cal { padding: 14px; } .cal-grid { gap: 4px; } }
+
+/* 개인정보 처리방침 */
+.policy { text-align: left; margin-top: 40px; display: grid; gap: 12px; overflow-wrap: anywhere; }
+.policy h3 { font-size: 18px; margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); }
+.policy p, .policy li { color: var(--ink-muted); font-size: 15px; line-height: 25px; }
+.policy ul { display: grid; gap: 8px; padding-left: 18px; list-style: disc; }
+.policy b { color: var(--ink); font-weight: 600; }
+.policy a, .consent a, .faq a { color: var(--accent); text-underline-offset: 3px; }
