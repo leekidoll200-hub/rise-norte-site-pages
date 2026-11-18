@@ -349,3 +349,8 @@ body[data-view="apply"] .float-cta { display: none; }
 .policy ul { display: grid; gap: 8px; padding-left: 18px; list-style: disc; }
 .policy b { color: var(--ink); font-weight: 600; }
 .policy a, .consent a, .faq a { color: var(--accent); text-underline-offset: 3px; }
+
+/* 예약: 남길 말 칸 · 10분 단위 시간 버튼 */
+.field textarea { width: 100%; min-height: 96px; padding: 12px 14px; border: 1px solid #C9C7C0; border-radius: var(--radius-md); background: var(--surface); font: inherit; color: var(--ink); resize: vertical; }
+.field textarea:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.cal-m { min-height: 42px; padding: 0 14px; font-weight: 500; }

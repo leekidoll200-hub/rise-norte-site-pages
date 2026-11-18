@@ -143,7 +143,7 @@
   /* ---------- 화면: 로그인 전 · 동의 · 대기 ---------- */
   function viewSignedOut(msg) {
     show(el("section", { class: "panel" }, [
-      el("h1", { text: "내 재무 · 사전 작성지" }),
+      el("h1", { text: "상담 고객 화면" }),
       el("p", { class: "muted", text: "상담 고객 전용 화면입니다. 카카오로 로그인하면 내 자료만 볼 수 있습니다." }),
       msg ? el("p", { class: "msg bad", text: msg }) : null,
       el("button", { class: "btn btn-kakao btn-wide", type: "button", onclick: login, text: "카카오로 로그인" }),
@@ -176,7 +176,8 @@
   function viewWaiting(profile) {
     show(el("section", { class: "panel" }, [
       el("h1", { text: "로그인됐습니다" }),
-      el("p", { text: "사전 작성지는 상담 계약 뒤에 열립니다. 담당 자산관리사가 열어 드리면 이 화면에서 바로 쓸 수 있습니다." }),
+      el("p", { text: "담당 자산관리사가 확인하면 이 화면이 열립니다. 열린 뒤에 화면을 새로 고쳐 주세요." }),
+      el("button", { class: "btn btn-main", type: "button", text: "새로 고침", onclick: function () { location.reload(); } }),
       el("p", { class: "src", text: "지금 상태: " + ({ lead: "신청", lecture: "강의 참석", ended: "관리 종료" }[profile.status] || profile.status) })
     ]));
   }
@@ -382,6 +383,149 @@
     }).then(function (ws) { return viewWorksheet(ws, profile, opts); });
   }
 
+  /* ---------- 화면: 상담 확인 · 동의 (계약 고객 · 문구 기준은 도구함 양식 14) ---------- */
+  var AGREE_VERSION = "contract-2026-11-19";
+  function agreementText() {
+    return [
+      el("h2", { text: "1 상담 범위" }),
+      el("p", { text: "재무설계 상담은 다섯 번의 만남(고민과 목표 듣기 → 진단과 합의 → 제안 → 실행 → 정리와 관리 약속)으로 진행하고, 이후 정기 점검으로 이어집니다. 다루는 것은 현금흐름 · 자산과 빚 · 목적자금 · 보장 · 연금과 절세 · 운용 방식입니다. 세금 신고 대리 · 법률 자문 · 돈을 대신 굴리는 일은 하지 않습니다." }),
+      el("h2", { text: "2 수당 안내" }),
+      el("p", { text: "담당 자산관리사가 제안하는 금융회사와 서비스 회사는 제휴 업체이며, 고객님이 계약하시면 담당자는 해당 회사로부터 소정의 수당을 받습니다." }),
+      el("p", { text: "보험 · 투자 · 운용 · 구독 서비스 등 담당자가 제안하는 모든 금융상품과 서비스에 적용되며, 지금까지 계약하신 것과 앞으로 계약하시는 것 모두 같습니다." }),
+      el("p", { text: "가입은 고객님 선택입니다. 다른 곳에서 가입하시거나 가입하지 않으셔도 상담과 점검은 그대로 진행합니다." })
+    ];
+  }
+  function privacyText() {
+    return [
+      el("h2", { text: "3 개인정보 수집 · 이용 동의" }),
+      el("dl", { class: "kv" }, [
+        el("dt", { text: "처리하는 곳" }), el("dd", { text: "라이즈 노르테 · 대표 이승준" }),
+        el("dt", { text: "목적" }), el("dd", { text: "재무설계 상담, 이후 자산관리(정기 점검 · 자산관리에 필요한 금융상품과 서비스 제안), 서비스 개선과 통계" }),
+        el("dt", { text: "항목" }), el("dd", { text: "이름 · 연락처 · 주소 · 이메일 · 생년월일 · 직업 · 가족 상황 · 소득 · 지출 · 자산 · 부채 · 보험 가입 내역 · 투자성향 · 보내 주신 자료(급여명세서 · 원천징수영수증 · 종합소득세 신고서 · 연말정산 서류 · 국민연금 예상액 등)" }),
+        el("dt", { text: "보관 기간" }), el("dd", { text: "자산관리를 그만두겠다고 하실 때까지 보관하고, 그때 바로 지웁니다" }),
+        el("dt", { text: "거부할 권리" }), el("dd", { text: "동의하지 않으실 수 있습니다. 다만 이 경우 재무설계 상담과 정기 점검은 진행하기 어렵습니다" })
+      ]),
+      el("p", { class: "src" }, ["상담을 시작한 날부터 받은 정보 전체에 적용됩니다. 주민등록번호 · 계좌번호는 보관하지 않으며, 받은 자료에 있으면 가리거나 지웁니다. 건강 정보는 보관하지 않습니다. 누구인지 알 수 없게 바꾼 통계와 사례는 상담 품질을 높이고 소개 자료를 만드는 데 씁니다. 자세한 내용은 ", el("a", { href: "../index.html#privacy", target: "_blank", rel: "noopener", text: "개인정보 처리방침" }), "에 있습니다."])
+    ];
+  }
+  function loadAgreement(me) {
+    return rest("GET", "consents?client_id=eq." + me.id + "&text_version=eq." + AGREE_VERSION + "&kind=in.(scope,commission,collect)&order=decided_at.desc").then(function (rows) {
+      var got = {};
+      rows.forEach(function (r) { if (!got[r.kind]) got[r.kind] = r; });
+      var ok = ["scope", "commission", "collect"].every(function (k) { return got[k] && got[k].agreed; });
+      return ok ? got.commission : null;
+    });
+  }
+  function viewAgreement(me, onDone) {
+    return loadAgreement(me).then(function (done) {
+      if (done) {
+        return el("section", { class: "panel" }, [
+          el("h1", { text: "재무설계 상담 확인 · 동의서" }),
+          el("p", { class: "msg", text: stamp(done.decided_at) + "에 " + (done.signer_name ? done.signer_name + " 님이 " : "") + "확인하고 동의하셨습니다." }),
+          el("details", {}, [el("summary", { class: "link-btn", text: "동의한 내용 다시 보기" })].concat(agreementText(), privacyText()))
+        ]);
+      }
+      var c2 = el("input", { type: "checkbox" }), c3 = el("input", { type: "checkbox" });
+      var name = el("input", { type: "text", maxlength: "20", autocomplete: "name", "aria-label": "이름" });
+      var err = el("p", { class: "msg bad", hidden: true });
+      var btn = el("button", {
+        class: "btn btn-main btn-wide", type: "button", text: "동의하고 저장", onclick: function () {
+          var n = name.value.trim();
+          if (!c2.checked || !c3.checked) { err.textContent = "두 곳 모두 표시해 주세요."; err.hidden = false; return; }
+          if (!n) { err.textContent = "이름을 적어 주세요."; err.hidden = false; name.focus(); return; }
+          btn.disabled = true; err.hidden = true;
+          rest("POST", "consents", ["scope", "commission", "collect"].map(function (k) {
+            return { client_id: me.id, kind: k, agreed: true, text_version: AGREE_VERSION, signer_name: n };
+          })).then(onDone, function (e) { btn.disabled = false; err.textContent = e.message; err.hidden = false; });
+        }
+      });
+      return el("section", { class: "panel" }, [el("h1", { text: "재무설계 상담 확인 · 동의서" }), el("p", { class: "muted", text: "라이즈노르테 대표 자산관리사 이승준" })]
+        .concat(agreementText(), [el("label", { class: "agree" }, [c2, el("span", { text: "수당 안내를 들었고 이해했습니다" })])],
+          privacyText(), [
+            el("label", { class: "agree" }, [c3, el("span", { text: "개인정보 수집 · 이용에 동의합니다" })]),
+            el("div", { class: "wide" }, [el("label", { text: "이름" }), name]),
+            el("p", { class: "src", text: "카카오로 로그인한 본인이 동의한 것으로 기록합니다. 동의한 문서 판 · 일시 · 이름이 남습니다." }),
+            err, btn
+          ]));
+    });
+  }
+
+  /* ---------- 화면: 후기 작성 (계약 고객 · 항목 기준은 도구함 양식 13) ---------- */
+  var HELPED = ["돈마다 자리가 정해진 것", "지출 · 저축 구조를 알게 된 것", "목표(결혼 · 집 · 노후)가 숫자로 보인 것", "보장을 정리한 것", "연금 · 절세를 챙긴 것", "실행까지 같이 한 것"];
+  var REVIEW_Q = [["before_worry", "상담을 받기 전에 가장 큰 고민은 무엇이었나요"], ["changed", "상담을 받고 나서 달라진 것이 있다면"], ["wishes", "아쉬웠던 점이나 바라는 점"], ["message", "비슷한 고민을 하는 분께 한마디 (선택)"]];
+  function viewReview(me, reload) {
+    return rest("GET", "reviews?client_id=eq." + me.id + "&order=created_at.desc&limit=1").then(function (rows) {
+      var rv = rows[0] || null;
+      var areas = {};
+      REVIEW_Q.forEach(function (q) { var t = el("textarea", { maxlength: "1000", rows: "3", "aria-label": q[1] }); t.value = (rv && rv[q[0]]) || ""; areas[q[0]] = t; });
+      var helped = {}; ((rv && rv.helped) || []).forEach(function (h) { helped[h] = true; });
+      var scope = rv ? rv.scope : null;
+      var label = el("input", { type: "text", maxlength: "40", placeholder: "예) 30대 직장인", "aria-label": "실을 때 표기" });
+      label.value = (rv && rv.label) || "";
+      var err = el("p", { class: "msg bad", hidden: true });
+      function radio(val, text) {
+        return el("label", {}, [el("input", { type: "radio", name: "rv-scope", checked: scope === val, onchange: function () { scope = val; } }), el("span", { text: text })]);
+      }
+      var btn = el("button", {
+        class: "btn btn-main btn-wide", type: "button", text: rv ? "고친 내용 저장" : "후기 저장", onclick: function () {
+          if (!scope) { err.textContent = "이 후기를 어떻게 써도 되는지 골라 주세요."; err.hidden = false; return; }
+          var body = { helped: HELPED.filter(function (h) { return helped[h]; }), scope: scope, label: label.value.trim() || null };
+          REVIEW_Q.forEach(function (q) { body[q[0]] = areas[q[0]].value.trim() || null; });
+          if (!body.before_worry && !body.changed && !body.wishes && !body.message && !body.helped.length) { err.textContent = "한 칸 이상 적거나 골라 주세요."; err.hidden = false; return; }
+          btn.disabled = true; err.hidden = true;
+          var p = rv ? rest("PATCH", "reviews?id=eq." + rv.id, body) : rest("POST", "reviews", Object.assign({ client_id: me.id }, body));
+          p.then(function () { reload("저장했습니다. 고맙습니다."); }, function (e) { btn.disabled = false; err.textContent = e.message; err.hidden = false; });
+        }
+      });
+      var kids = [
+        el("h1", { text: "상담 후기" }),
+        el("p", { class: "muted", text: "편하게 적어 주세요. 짧아도 좋고, 비워 두셔도 됩니다." }),
+        rv ? el("p", { class: "msg", text: stamp(rv.updated_at) + "에 저장한 후기입니다. 고쳐서 다시 저장할 수 있습니다." + (rv.published_at ? " 지금 실려 있는 후기라서, 고치면 내려가고 담당자가 다시 확인한 뒤 실립니다." : "") }) : null
+      ];
+      REVIEW_Q.slice(0, 2).forEach(function (q) { kids.push(el("div", { class: "wide" }, [el("label", { text: q[1] }), areas[q[0]]])); });
+      kids.push(el("div", { class: "q" }, [el("p", { text: "가장 도움이 된 것 (여러 개 골라도 됩니다)" }), el("div", { class: "opts" }, HELPED.map(function (h) {
+        return el("label", {}, [el("input", { type: "checkbox", checked: !!helped[h], onchange: function (e) { helped[h] = e.target.checked; } }), el("span", { text: h })]);
+      }))]));
+      REVIEW_Q.slice(2).forEach(function (q) { kids.push(el("div", { class: "wide" }, [el("label", { text: q[1] }), areas[q[0]]])); });
+      kids.push(el("div", { class: "q" }, [el("p", { text: "이 후기를 어떻게 써도 될까요" }), el("div", { class: "opts" }, [radio("public", "이름 없이 홈페이지 · 소개 자료에 실어도 됩니다"), radio("private", "담당자만 참고해 주세요")])]));
+      kids.push(el("div", { class: "wide" }, [el("label", { text: "실을 때 표기 (비워 두면 나이대와 직업만 적습니다)" }), label]));
+      kids.push(el("p", { class: "src", text: "이름 · 연락처 · 직장 이름은 싣지 않습니다. ‘아쉬웠던 점’은 싣지 않고 담당자만 봅니다. 실은 뒤에도 내려 달라고 하시면 바로 내립니다." }));
+      kids.push(err); kids.push(btn);
+      if (rv) kids.push(el("button", {
+        class: "link-btn", type: "button", text: "이 후기 지우기", onclick: function () {
+          if (!confirm("적어 주신 후기를 지웁니다. 되돌릴 수 없습니다. 지울까요?")) return;
+          rest("DELETE", "reviews?id=eq." + rv.id).then(function () { reload("후기를 지웠습니다."); }, function (e) { err.textContent = e.message; err.hidden = false; });
+        }
+      }));
+      return el("section", { class: "panel" }, kids);
+    });
+  }
+
+  /* ---------- 화면: 계약 고객의 첫 화면 (상담 동의 · 후기 · 사전 작성지) ---------- */
+  function viewClientHome(me, opts) {
+    var tab = null, holder = el("div"), tabs = el("div", { class: "tabs" }), note = el("p", { class: "msg", hidden: true });
+    function drawTabs() {
+      tabs.textContent = "";
+      [["agree", "상담 동의"], ["review", "후기 작성"], ["sheet", "사전 작성지"]].forEach(function (t) {
+        tabs.appendChild(el("button", { type: "button", "aria-pressed": String(tab === t[0]), text: t[1], onclick: function () { note.hidden = true; go(t[0]); } }));
+      });
+    }
+    function go(t, message) {
+      tab = t; drawTabs();
+      if (message) { note.textContent = message; note.hidden = false; }
+      holder.textContent = ""; holder.appendChild(el("p", { class: "muted", text: "불러오는 중입니다." }));
+      var p = t === "agree" ? viewAgreement(me, function () { go("review", "동의를 저장했습니다. 이어서 후기를 적어 주실 수 있습니다."); })
+        : t === "review" ? viewReview(me, function (m) { go("review", m); })
+        : openOwnWorksheet(me, opts);
+      p.then(function (n) { holder.textContent = ""; holder.appendChild(n); window.scrollTo(0, 0); },
+        function (e) { holder.textContent = ""; holder.appendChild(el("p", { class: "msg bad", text: e.message })); });
+    }
+    return loadAgreement(me).then(function (done) {
+      go(done ? "review" : "agree");
+      return el("div", {}, [tabs, note, holder]);
+    });
+  }
+
   /* ---------- 화면: 담당자 ---------- */
   var STATUS = [["lead", "신청"], ["lecture", "강의 참석"], ["contracted", "계약 고객"], ["ended", "관리 종료"]];
   function viewAdvisor(me) {
@@ -389,18 +533,20 @@
     var tabs = el("div", { class: "tabs" });
     function drawTabs() {
       tabs.textContent = "";
-      [["book", "예약 관리"], ["list", "고객 목록"], ["mine", "작성지 시험 (내 계정)"]].forEach(function (t) {
+      [["book", "예약 관리"], ["list", "고객 목록"], ["reviews", "후기"], ["mine", "고객 화면 시험 (내 계정)"]].forEach(function (t) {
         tabs.appendChild(el("button", { type: "button", "aria-pressed": String(tab === t[0]), text: t[1], onclick: function () { tab = t[0]; drawTabs(); go(); } }));
       });
     }
     function go() {
       holder.textContent = ""; holder.appendChild(el("p", { class: "muted", text: "불러오는 중입니다." }));
-      var p = tab === "mine" ? openOwnWorksheet(me, { advisor: true }) : tab === "book" ? viewBookings(go) : list();
+      var p = tab === "mine" ? viewClientHome(me, { advisor: true }) : tab === "book" ? viewBookings(go) : tab === "reviews" ? reviews() : list();
       p.then(function (n) { holder.textContent = ""; holder.appendChild(n); }, function (e) { holder.textContent = ""; holder.appendChild(el("p", { class: "msg bad", text: e.message })); });
     }
     function list() {
-      return Promise.all([rest("GET", "profiles?select=*&order=created_at.desc"), rest("GET", "worksheets?select=id,client_id,steps_done,updated_at,submitted_at&order=updated_at.desc")]).then(function (res) {
+      return Promise.all([rest("GET", "profiles?select=*&order=created_at.desc"), rest("GET", "worksheets?select=id,client_id,steps_done,updated_at,submitted_at&order=updated_at.desc"),
+        rest("GET", "consents?select=client_id,decided_at,signer_name&kind=eq.commission&agreed=is.true&text_version=eq." + AGREE_VERSION + "&order=decided_at.desc")]).then(function (res) {
         var byClient = {}; res[1].forEach(function (w) { if (!byClient[w.client_id]) byClient[w.client_id] = w; });
+        var agreed = {}; res[2].forEach(function (c) { if (!agreed[c.client_id]) agreed[c.client_id] = c; });
         var rows = res[0].map(function (p) {
           var w = byClient[p.id]; var n = w ? Object.keys(w.steps_done || {}).length : 0;
           var sel = el("select", { "aria-label": "상태", onchange: function (e) { rest("PATCH", "profiles?id=eq." + p.id, { status: e.target.value }).then(null, function (err) { alert(err.message); go(); }); } },
@@ -409,6 +555,7 @@
           return el("tr", {}, [
             el("td", { text: (p.display_name || "(이름 없음)") + (p.role === "advisor" ? " · 담당자" : "") }),
             el("td", {}, [sel]),
+            el("td", { text: agreed[p.id] ? stamp(agreed[p.id].decided_at) + (agreed[p.id].signer_name ? " · " + agreed[p.id].signer_name : "") : "—" }),
             el("td", { text: w ? n + "/" + STEPS.length + (w.submitted_at ? " · 제출" : "") : "아직 없음" }),
             el("td", { text: w ? stamp(w.updated_at) : "—" }),
             el("td", {}, [w ? el("button", { class: "link-btn", type: "button", text: "작성지 보기", onclick: function () { openClient(p, w.id); } }) : null,
@@ -416,8 +563,37 @@
           ]);
         });
         return el("section", {}, [el("h1", { text: "고객 목록", style: "margin-bottom:16px" }), el("div", { class: "table-wrap" }, [el("table", { class: "clients" }, [
-          el("thead", {}, [el("tr", {}, ["이름", "상태", "작성지", "마지막 저장", ""].map(function (h) { return el("th", { text: h }); }))]), el("tbody", {}, rows)])]),
-          el("p", { class: "src", text: "‘계약 고객’으로 바꾸면 그 고객이 사전 작성지를 쓸 수 있습니다. 화면에 고객 이름이 보이니 다른 사람이 보는 곳에서는 열지 마세요." })]);
+          el("thead", {}, [el("tr", {}, ["이름", "상태", "상담 동의", "작성지", "마지막 저장", ""].map(function (h) { return el("th", { text: h }); }))]), el("tbody", {}, rows)])]),
+          el("p", { class: "src", text: "‘계약 고객’으로 바꾸면 그 고객이 상담 동의 · 후기 작성 · 사전 작성지를 쓸 수 있습니다. 고객이 카카오로 한 번 로그인해야 이 목록에 나타납니다. 화면에 고객 이름이 보이니 다른 사람이 보는 곳에서는 열지 마세요." })]);
+      });
+    }
+    function reviews() {
+      return Promise.all([rest("GET", "reviews?select=*&order=created_at.desc"), rest("GET", "profiles?select=id,display_name"),
+        rest("GET", "consents?select=client_id,signer_name&signer_name=not.is.null&order=decided_at.desc")]).then(function (res) {
+        var signed = {}; res[2].forEach(function (c) { if (!signed[c.client_id]) signed[c.client_id] = c.signer_name; });
+        var names = {}; res[1].forEach(function (p) { names[p.id] = signed[p.id] || p.display_name || "(이름 없음)"; });
+        function oops(e) { alert(e.message); }
+        var kids = [el("h1", { text: "후기" })];
+        if (!res[0].length) kids.push(el("p", { class: "muted", text: "아직 들어온 후기가 없습니다." }));
+        res[0].forEach(function (r) {
+          var state = r.published_at ? "실을 후기로 표시함" : r.scope === "public" ? "실어도 됨 · 아직 확인 전" : "담당자만 참고";
+          var dl = [];
+          REVIEW_Q.forEach(function (q) { if (r[q[0]]) { dl.push(el("dt", { text: q[1].replace(" (선택)", "") + (q[0] === "wishes" ? " (싣지 않음)" : "") })); dl.push(el("dd", { text: r[q[0]] })); } });
+          if ((r.helped || []).length) { dl.push(el("dt", { text: "가장 도움이 된 것" })); dl.push(el("dd", { text: r.helped.join(" · ") })); }
+          dl.push(el("dt", { text: "실을 때 표기" })); dl.push(el("dd", { text: r.label || "(비움 · 나이대와 직업만)" }));
+          kids.push(el("div", { class: "panel" }, [
+            el("h2", { text: names[r.client_id] + " · " + state }),
+            el("p", { class: "src", text: "저장한 때 " + stamp(r.updated_at) }),
+            el("dl", { class: "kv" }, dl),
+            el("div", { style: "display:flex;flex-wrap:wrap;gap:16px" }, [
+              r.scope === "public" && !r.published_at ? el("button", { class: "link-btn", type: "button", text: "실을 후기로 표시", onclick: function () { rest("PATCH", "reviews?id=eq." + r.id, { published_at: new Date().toISOString(), unpublished_at: null }).then(go, oops); } }) : null,
+              r.published_at ? el("button", { class: "link-btn", type: "button", text: "내리기", onclick: function () { rest("PATCH", "reviews?id=eq." + r.id, { published_at: null, unpublished_at: new Date().toISOString() }).then(go, oops); } }) : null,
+              el("button", { class: "link-btn", type: "button", text: "지우기", onclick: function () { if (confirm("이 후기를 지웁니다. 되돌릴 수 없습니다. 지울까요?")) rest("DELETE", "reviews?id=eq." + r.id).then(go, oops); } })
+            ])
+          ]));
+        });
+        kids.push(el("p", { class: "src", text: "‘실어도 됩니다’를 고른 후기만 실을 수 있습니다. 실을 때 글을 고치지 않고, 수익률 · 수익 금액 · 보장 표현 · 상품과 회사 이름 · 다른 사람을 알아볼 수 있는 내용이 든 문장만 뺍니다. ‘아쉬웠던 점’은 싣지 않습니다. 고객이 내려 달라고 하면 바로 ‘내리기’를 누릅니다. 지금은 표시만 해 두는 단계이고, 홈페이지 화면에 후기를 보여 주는 칸은 아직 없습니다." }));
+        return el("section", { style: "display:grid;gap:24px" }, kids);
       });
     }
     function openClient(p, id) {
@@ -428,7 +604,7 @@
       }, function (e) { holder.appendChild(el("p", { class: "msg bad", text: e.message })); });
     }
     function remove(p) {
-      if (!confirm((p.display_name || "이 고객") + "의 작성지 · 투자성향 · 동의 기록을 모두 지웁니다. 되돌릴 수 없습니다. 지울까요?")) return;
+      if (!confirm((p.display_name || "이 고객") + "의 작성지 · 투자성향 · 동의 기록 · 후기를 모두 지웁니다. 되돌릴 수 없습니다. 지울까요?")) return;
       rest("DELETE", "profiles?id=eq." + p.id).then(go, function (e) { alert(e.message); });
     }
     drawTabs(); go();
@@ -439,151 +615,175 @@
   var KST_KEY = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" });
   var KST_TIME = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "numeric", minute: "2-digit" });
   var KST_DAY = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short" });
-  var PRESET_TIMES = ["10:00", "13:00", "15:00", "17:00", "19:30"];
   var BOOK_STATUS = { "new": "새 신청", confirmed: "확정", done: "상담함", cancelled: "취소" };
 
   function viewBookings(reload) {
-    var since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    var nowIso = new Date().toISOString();
     return Promise.all([
-      rest("GET", "slots?select=*&starts_at=gte." + encodeURIComponent(since) + "&order=starts_at"),
-      rest("GET", "bookings?select=*&order=created_at.desc")
+      rest("GET", "bookings?select=*&order=starts_at.asc.nullslast,created_at.desc"),
+      rest("GET", "blocks?select=*&ends_at=gte." + encodeURIComponent(nowIso) + "&order=starts_at"),
+      rest("GET", "open_rule?select=*&id=eq.1")
     ]).then(function (res) {
-      var slots = res[0], bookings = res[1];
-      var bySlot = {}; bookings.forEach(function (b) { if (b.slot_id) bySlot[b.slot_id] = b; });
+      var bookings = res[0], blocks = res[1], rule = (res[2] && res[2][0]) || {};
       var msg = el("p", { class: "msg bad", hidden: true });
-      function oops(e) { msg.textContent = e.message; msg.hidden = false; }
-
-      /* 시간 열기: 하루 또는 여러 날을 한꺼번에 */
+      function oops(e) { msg.textContent = e.message; msg.hidden = false; msg.scrollIntoView({ block: "center" }); }
       var today = KST_KEY.format(new Date());
-      var from = el("input", { type: "date", min: today, "aria-label": "시작 날짜" });
-      var to = el("input", { type: "date", min: today, "aria-label": "끝 날짜" });
-      var WEEK = ["일", "월", "화", "수", "목", "금", "토"];
-      var weekOn = { 1: true, 2: true, 3: true, 4: true, 5: true };
-      var weekChips = el("div", { class: "opts" }, [1, 2, 3, 4, 5, 6, 0].map(function (w) {
-        return el("label", {}, [el("input", { type: "checkbox", checked: !!weekOn[w], onchange: function (e) { weekOn[w] = e.target.checked; } }), el("span", { text: WEEK[w] })]);
-      }));
-      var picked = {};
-      var chips = el("div", { class: "opts" }, PRESET_TIMES.map(function (t) {
-        return el("label", {}, [el("input", { type: "checkbox", onchange: function (e) { picked[t] = e.target.checked; } }), el("span", { text: t })]);
-      }));
-      var custom = el("input", { type: "time", "aria-label": "다른 시간" });
-      var minutes = el("select", { "aria-label": "상담 길이" }, [60, 90, 120].map(function (m) { return el("option", { value: String(m), text: m + "분" }); }));
-      minutes.value = "90";
-      function dayList() {
-        if (!from.value) return [];
-        var end = to.value && to.value >= from.value ? to.value : from.value;
-        var out = [], d = new Date(from.value + "T00:00:00Z"), last = new Date(end + "T00:00:00Z");
-        var single = end === from.value;
-        while (d <= last && out.length < 92) {
-          if (single || weekOn[d.getUTCDay()]) out.push(d.toISOString().slice(0, 10));
-          d = new Date(d.getTime() + 86400000);
-        }
-        return out;
-      }
-      var opener = el("div", { class: "panel" }, [
-        el("h2", { text: "예약 시간 열기" }),
-        el("p", { class: "muted", text: "여기서 연 시간만 고객의 달력에 나타납니다. 열지 않은 시간은 처음부터 예약할 수 없습니다. 하루만 열 때는 시작 날짜만, 여러 날을 한꺼번에 열 때는 끝 날짜와 요일까지 고릅니다." }),
-        el("div", { class: "wide" }, [el("label", { text: "시작 날짜" }), from]),
-        el("div", { class: "wide" }, [el("label", { text: "끝 날짜 (여러 날을 열 때만)" }), to]),
-        el("div", { class: "q" }, [el("p", { text: "요일 (여러 날을 열 때 적용)" }), weekChips]),
-        el("div", { class: "q" }, [el("p", { text: "시간 (여러 개 가능)" }), chips]),
-        el("div", { class: "wide" }, [el("label", { text: "다른 시간 (선택)" }), custom]),
-        el("div", { class: "wide" }, [el("label", { text: "상담 길이" }), minutes]),
-        el("button", {
-          class: "btn btn-main", type: "button", text: "열기", onclick: function () {
-            var times = PRESET_TIMES.filter(function (t) { return picked[t]; });
-            if (custom.value && times.indexOf(custom.value) === -1) times.push(custom.value);
-            var dates = dayList();
-            if (!dates.length || !times.length) return oops(new Error("날짜와 시간을 골라 주세요. (여러 날을 열 때는 요일도 확인해 주세요)"));
-            var now = new Date(), rows = [];
-            dates.forEach(function (d) { times.forEach(function (t) {
-              var at = new Date(d + "T" + t + ":00+09:00");
-              if (at > now) rows.push({ starts_at: at.toISOString(), minutes: Number(minutes.value) });
-            }); });
-            if (!rows.length) return oops(new Error("지난 시간은 열 수 없습니다."));
-            if (rows.length > 300) return oops(new Error("한 번에 300개까지만 열 수 있습니다. 기간을 나눠 주세요."));
-            if (rows.length > 20 && !confirm(dates.length + "일 · 모두 " + rows.length + "개 시간을 엽니다. 이미 있는 시간은 그대로 둡니다. 열까요?")) return;
-            rest("POST", "slots?on_conflict=starts_at", rows, "resolution=ignore-duplicates").then(reload, oops);
-          }
-        })
-      ]);
 
-      /* 열린 시간과 예약 */
+      /* 들어온 예약 */
       function bookingBox(b) {
         return el("dl", { class: "kv" }, [
           el("dt", { text: "이름" }), el("dd", { text: b.name }),
           el("dt", { text: "연락처" }), el("dd", { text: b.phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") }),
+          el("dt", { text: "희망 장소" }), el("dd", { text: b.place || "—" }),
+          b.memo ? el("dt", { text: "남긴 말" }) : null, b.memo ? el("dd", { text: b.memo }) : null,
           b.wish ? el("dt", { text: "원하는 때" }) : null, b.wish ? el("dd", { text: b.wish }) : null,
           el("dt", { text: "관심 주제" }), el("dd", { text: (b.topics || []).join(" · ") || "—" }),
           b.check_result ? el("dt", { text: "자가 점검" }) : null, b.check_result ? el("dd", { text: b.check_result }) : null,
           el("dt", { text: "만난 경로" }), el("dd", { text: b.channel || "—" }),
-          el("dt", { text: "신청한 때" }), el("dd", { text: stamp(b.created_at) + " · " + (BOOK_STATUS[b.status] || b.status) })
+          el("dt", { text: "신청한 때" }), el("dd", { text: stamp(b.created_at) })
         ]);
       }
       function setStatus(b, st) { return function () { rest("PATCH", "bookings?id=eq." + b.id, { status: st }).then(reload, oops); }; }
       function removeBooking(b) {
         return function () {
-          if (!confirm(b.name + " 님의 신청 정보를 지웁니다. 되돌릴 수 없습니다. 지울까요?")) return;
-          var reopen = b.slot_id && confirm("그 시간을 다시 열어 둘까요? (취소를 누르면 시간도 닫습니다)");
-          var slotId = b.slot_id;
-          rest("DELETE", "bookings?id=eq." + b.id).then(function () {
-            if (!slotId) return;
-            return reopen ? rest("PATCH", "slots?id=eq." + slotId, { status: "open" }) : rest("DELETE", "slots?id=eq." + slotId);
-          }).then(reload, oops);
+          if (!confirm(b.name + " 님의 신청 정보를 지웁니다. 그 시간은 다시 예약할 수 있게 열립니다. 되돌릴 수 없습니다. 지울까요?")) return;
+          rest("DELETE", "bookings?id=eq." + b.id).then(reload, oops);
         };
       }
-      var days = {}, order = [];
-      slots.forEach(function (sl) { var k = KST_KEY.format(new Date(sl.starts_at)); if (!days[k]) { days[k] = []; order.push(k); } days[k].push(sl); });
-      var listBox = el("div", { class: "panel" }, [el("h2", { text: "열어 둔 시간과 예약" })]);
-      if (!order.length) listBox.appendChild(el("p", { class: "muted", text: "열어 둔 시간이 없습니다. 위에서 시간을 열어 주세요." }));
-      order.forEach(function (k) {
-        var openIds = days[k].filter(function (x) { return x.status === "open"; }).map(function (x) { return x.id; });
-        var closedIds = days[k].filter(function (x) { return x.status === "closed"; }).map(function (x) { return x.id; });
-        function setMany(ids, st) { return function () { rest("PATCH", "slots?id=in.(" + ids.join(",") + ")", { status: st }).then(reload, oops); }; }
-        var box = el("div", { class: "sec-box" }, [el("div", { class: "day-head" }, [
-          el("p", { text: KST_DAY.format(new Date(days[k][0].starts_at)) }),
-          openIds.length ? el("button", { class: "link-btn", type: "button", text: "이 날 전체 막기", onclick: setMany(openIds, "closed") }) : null,
-          closedIds.length ? el("button", { class: "link-btn", type: "button", text: "막은 시간 다시 열기", onclick: setMany(closedIds, "open") }) : null
-        ])]);
-        days[k].forEach(function (sl) {
-          var b = bySlot[sl.id];
-          var label = KST_TIME.format(new Date(sl.starts_at)) + " · " + sl.minutes + "분 · " + (b ? "예약됨" : sl.status === "open" ? "열림" : "막음");
-          var row = el("div", { class: "wide" }, [el("label", { text: label })]);
-          if (b) {
-            row.appendChild(bookingBox(b));
-            row.appendChild(el("div", { class: "opts", style: "display:flex;flex-wrap:wrap;gap:12px" }, [
-              b.status === "new" ? el("button", { class: "link-btn", type: "button", text: "확정으로 표시", onclick: setStatus(b, "confirmed") }) : null,
-              b.status !== "done" ? el("button", { class: "link-btn", type: "button", text: "상담함으로 표시", onclick: setStatus(b, "done") }) : null,
-              el("button", { class: "link-btn", type: "button", text: "신청 지우기", onclick: removeBooking(b) })
-            ]));
-          } else {
-            if (sl.status !== "open") row.classList.add("blocked");
-            row.appendChild(el("div", { style: "display:flex;flex-wrap:wrap;gap:16px" }, [
-              sl.status === "open"
-                ? el("button", { class: "link-btn", type: "button", text: "막기", onclick: function () { rest("PATCH", "slots?id=eq." + sl.id, { status: "closed" }).then(reload, oops); } })
-                : el("button", { class: "link-btn", type: "button", text: "다시 열기", onclick: function () { rest("PATCH", "slots?id=eq." + sl.id, { status: "open" }).then(reload, oops); } }),
-              el("button", { class: "link-btn", type: "button", text: "지우기", onclick: function () { rest("DELETE", "slots?id=eq." + sl.id).then(reload, oops); } })
-            ]));
-          }
-          box.appendChild(row);
+      function bookingRow(b) {
+        var when = b.starts_at ? KST_TIME.format(new Date(b.starts_at)) + " · " + (b.minutes || rule.minutes || 90) + "분" : "시간을 고르지 않음";
+        return el("div", { class: "wide" }, [
+          el("label", { text: when + " · " + (BOOK_STATUS[b.status] || b.status) }),
+          bookingBox(b),
+          el("div", { style: "display:flex;flex-wrap:wrap;gap:12px" }, [
+            b.status === "new" ? el("button", { class: "link-btn", type: "button", text: "확정으로 표시", onclick: setStatus(b, "confirmed") }) : null,
+            b.status !== "done" ? el("button", { class: "link-btn", type: "button", text: "상담함으로 표시", onclick: setStatus(b, "done") }) : null,
+            el("button", { class: "link-btn", type: "button", text: "신청 지우기", onclick: removeBooking(b) })
+          ])
+        ]);
+      }
+      function dayBoxes(list, into) {
+        var days = {}, order = [];
+        list.forEach(function (b) { var k = b.starts_at ? KST_KEY.format(new Date(b.starts_at)) : "none"; if (!days[k]) { days[k] = []; order.push(k); } days[k].push(b); });
+        order.forEach(function (k) {
+          var box = el("div", { class: "sec-box" }, [el("div", { class: "day-head" }, [el("p", { text: k === "none" ? "시간을 고르지 않은 신청" : KST_DAY.format(new Date(days[k][0].starts_at)) })])]);
+          days[k].forEach(function (b) { box.appendChild(bookingRow(b)); });
+          into.appendChild(box);
         });
-        listBox.appendChild(box);
-      });
+      }
+      var cut = Date.now() - 24 * 3600 * 1000;
+      var coming = bookings.filter(function (b) { return !b.starts_at || new Date(b.starts_at).getTime() >= cut; });
+      var past = bookings.filter(function (b) { return b.starts_at && new Date(b.starts_at).getTime() < cut; }).reverse();
+      var listBox = el("div", { class: "panel" }, [el("h2", { text: "들어온 예약" })]);
+      if (!coming.length) listBox.appendChild(el("p", { class: "muted", text: "아직 들어온 예약이 없습니다. 예약이 들어오면 휴대폰 알림이 오고 여기에 나타납니다." }));
+      dayBoxes(coming, listBox);
+      if (past.length) {
+        var pastBox = el("details", {}, [el("summary", { class: "link-btn", text: "지난 예약 " + past.length + "건 보기" })]);
+        dayBoxes(past, pastBox);
+        listBox.appendChild(pastBox);
+      }
 
-      /* 시간을 못 고른 신청 */
-      var loose = bookings.filter(function (b) { return !b.slot_id; });
-      var looseBox = el("div", { class: "panel" }, [el("h2", { text: "시간을 고르지 못한 신청" })]);
-      if (!loose.length) looseBox.appendChild(el("p", { class: "muted", text: "없습니다." }));
-      loose.forEach(function (b) {
-        looseBox.appendChild(el("div", { class: "sec-box" }, [bookingBox(b), el("div", { class: "wide", style: "display:flex;flex-wrap:wrap;gap:12px" }, [
-          b.status !== "done" ? el("button", { class: "link-btn", type: "button", text: "연락함으로 표시", onclick: setStatus(b, "done") }) : null,
-          el("button", { class: "link-btn", type: "button", text: "신청 지우기", onclick: removeBooking(b) })
-        ])]));
+      /* 막기: 일정이 생긴 시간 · 하루 · 여러 날 */
+      var bFrom = el("input", { type: "date", min: today, "aria-label": "막을 날" });
+      var bTo = el("input", { type: "date", min: today, "aria-label": "마지막 날" });
+      var allDay = el("input", { type: "checkbox", checked: true });
+      var tFrom = el("input", { type: "time", step: "600", value: "12:00", "aria-label": "막기 시작 시간" });
+      var tTo = el("input", { type: "time", step: "600", value: "14:00", "aria-label": "막기 끝 시간" });
+      var timeRow = el("div", { class: "wide", hidden: true }, [el("label", { text: "막을 시간 (부터 ~ 까지)" }), el("div", { style: "display:flex;flex-wrap:wrap;gap:8px;align-items:center" }, [tFrom, el("span", { text: "~" }), tTo])]);
+      allDay.addEventListener("change", function () { timeRow.hidden = allDay.checked; });
+      var bNote = el("input", { type: "text", maxlength: "40", placeholder: "예) 병원 · 가족 모임 (나만 보는 메모)", "aria-label": "메모" });
+      var blocker = el("div", { class: "panel" }, [
+        el("h2", { text: "시간 막기" }),
+        el("p", { class: "muted", text: "개인 일정이 생기면 그 시간이나 그 날을 막아 주세요. 막은 시간은 고객 달력에서 사라집니다. 이미 들어온 예약은 그대로 둡니다." }),
+        el("div", { class: "wide" }, [el("label", { text: "날짜" }), bFrom]),
+        el("div", { class: "wide" }, [el("label", { text: "마지막 날 (여러 날을 막을 때만)" }), bTo]),
+        el("label", { class: "agree" }, [allDay, el("span", { text: "하루 종일 막기" })]),
+        timeRow,
+        el("div", { class: "wide" }, [el("label", { text: "메모 (선택)" }), bNote]),
+        el("button", {
+          class: "btn btn-main", type: "button", text: "막기", onclick: function () {
+            if (!bFrom.value) return oops(new Error("날짜를 골라 주세요."));
+            var end = bTo.value && bTo.value >= bFrom.value ? bTo.value : bFrom.value;
+            var note = bNote.value.trim() || null, rows = [];
+            if (allDay.checked) {
+              rows.push({ starts_at: new Date(bFrom.value + "T00:00:00+09:00").toISOString(), ends_at: new Date(new Date(end + "T00:00:00+09:00").getTime() + 86400000).toISOString(), note: note });
+            } else {
+              if (!tFrom.value || !tTo.value || tTo.value <= tFrom.value) return oops(new Error("막을 시간을 확인해 주세요. 끝 시간이 시작 시간보다 늦어야 합니다."));
+              var d = new Date(bFrom.value + "T00:00:00Z"), last = new Date(end + "T00:00:00Z");
+              while (d <= last && rows.length < 62) {
+                var k = d.toISOString().slice(0, 10);
+                rows.push({ starts_at: new Date(k + "T" + tFrom.value + ":00+09:00").toISOString(), ends_at: new Date(k + "T" + tTo.value + ":00+09:00").toISOString(), note: note });
+                d = new Date(d.getTime() + 86400000);
+              }
+            }
+            rest("POST", "blocks", rows).then(reload, oops);
+          }
+        })
+      ]);
+      function blockLabel(k) {
+        var s = new Date(k.starts_at), e = new Date(k.ends_at);
+        function midnight(d) { return (d.getTime() + 9 * 3600000) % 86400000 === 0; }
+        var whole = midnight(s) && midnight(e);
+        if (whole) {
+          var lastDay = new Date(e.getTime() - 60000);
+          return KST_KEY.format(s) === KST_KEY.format(lastDay) ? KST_DAY.format(s) + " · 하루 종일" : KST_DAY.format(s) + " ~ " + KST_DAY.format(lastDay) + " · 하루 종일";
+        }
+        return KST_DAY.format(s) + " · " + KST_TIME.format(s) + " ~ " + KST_TIME.format(e);
+      }
+      var blockList = el("div", { class: "sec-box" }, [el("div", { class: "day-head" }, [el("p", { text: "막아 둔 시간" })])]);
+      if (!blocks.length) blockList.appendChild(el("div", { class: "wide" }, [el("p", { class: "muted", text: "막아 둔 시간이 없습니다." })]));
+      blocks.forEach(function (k) {
+        blockList.appendChild(el("div", { class: "wide" }, [
+          el("label", { text: blockLabel(k) + (k.note ? " · " + k.note : "") }),
+          el("div", {}, [el("button", { class: "link-btn", type: "button", text: "막기 풀기", onclick: function () { rest("DELETE", "blocks?id=eq." + k.id).then(reload, oops); } })])
+        ]));
       });
+      blocker.appendChild(blockList);
+
+      /* 기본으로 여는 시간 */
+      var WEEK = ["일", "월", "화", "수", "목", "금", "토"];
+      var weekOn = {}; (rule.weekdays || []).forEach(function (w) { weekOn[w] = true; });
+      var weekChips = el("div", { class: "opts" }, [1, 2, 3, 4, 5, 6, 0].map(function (w) {
+        return el("label", {}, [el("input", { type: "checkbox", checked: !!weekOn[w], onchange: function (e) { weekOn[w] = e.target.checked; } }), el("span", { text: WEEK[w] })]);
+      }));
+      var first = el("input", { type: "time", step: "600", value: rule.first_start || "10:00", "aria-label": "가장 이른 시작 시간" });
+      var last = el("input", { type: "time", step: "600", value: rule.last_start || "19:30", "aria-label": "가장 늦은 시작 시간" });
+      function pick(opts, val, label) {
+        var s = el("select", { "aria-label": label }, opts.map(function (o) { return el("option", { value: String(o[0]), text: o[1] }); }));
+        s.value = String(val); if (!s.value) s.value = String(opts[0][0]);
+        return s;
+      }
+      var minutes = pick([[60, "60분"], [90, "90분"], [120, "120분"]], rule.minutes || 90, "상담 길이");
+      var gap = pick([[0, "없음"], [10, "10분"], [20, "20분"], [30, "30분"], [60, "1시간"]], rule.gap_minutes == null ? 30 : rule.gap_minutes, "예약 사이 여유");
+      var ahead = pick([[14, "2주 앞까지"], [28, "4주 앞까지"], [56, "8주 앞까지"], [84, "12주 앞까지"]], rule.days_ahead || 28, "예약을 받는 기간");
+      var enabled = el("input", { type: "checkbox", checked: rule.enabled !== false });
+      var opener = el("div", { class: "panel" }, [
+        el("h2", { text: "기본으로 여는 시간" }),
+        el("p", { class: "muted", text: "아래 요일과 시간대는 내일부터 항상 열려 있습니다. 고객은 이 시간대 안에서 10분 단위로 시작 시간을 고릅니다. 예약이 들어오면 그 시간과 앞뒤 여유만큼은 자동으로 닫힙니다." }),
+        el("label", { class: "agree" }, [enabled, el("span", { text: "예약 받기 (끄면 달력에서 아무 시간도 고를 수 없습니다)" })]),
+        el("div", { class: "q" }, [el("p", { text: "여는 요일" }), weekChips]),
+        el("div", { class: "wide" }, [el("label", { text: "가장 이른 시작 시간" }), first]),
+        el("div", { class: "wide" }, [el("label", { text: "가장 늦은 시작 시간" }), last]),
+        el("div", { class: "wide" }, [el("label", { text: "상담 길이" }), minutes]),
+        el("div", { class: "wide" }, [el("label", { text: "예약과 예약 사이 여유 (이동 시간)" }), gap]),
+        el("div", { class: "wide" }, [el("label", { text: "예약을 받는 기간" }), ahead]),
+        el("button", {
+          class: "btn btn-main", type: "button", text: "저장", onclick: function () {
+            var days = [0, 1, 2, 3, 4, 5, 6].filter(function (w) { return weekOn[w]; });
+            if (!days.length) return oops(new Error("요일을 하나 이상 골라 주세요."));
+            if (!/^\d\d:\d0$/.test(first.value) || !/^\d\d:\d0$/.test(last.value)) return oops(new Error("시간은 10분 단위로 적어 주세요. (예: 10:00 · 19:30)"));
+            if (last.value < first.value) return oops(new Error("가장 늦은 시작 시간이 가장 이른 시작 시간보다 빠릅니다."));
+            rest("PATCH", "open_rule?id=eq.1", {
+              enabled: enabled.checked, weekdays: days, first_start: first.value, last_start: last.value,
+              minutes: Number(minutes.value), gap_minutes: Number(gap.value), days_ahead: Number(ahead.value), updated_at: new Date().toISOString()
+            }).then(reload, oops);
+          }
+        })
+      ]);
 
       return el("section", { style: "display:grid;gap:24px" }, [
-        el("h1", { text: "예약 관리" }), msg, opener, listBox, looseBox,
-        el("p", { class: "src", text: "‘막기’를 누른 시간은 고객의 달력에서 사라지고, ‘다시 열기’를 누르면 다시 나타납니다. 새 신청이 오면 휴대폰 알림 앱(ntfy)으로 날짜와 시간만 알려 줍니다. 이름과 연락처는 이 화면에서 확인해 주세요. 상담으로 이어지지 않은 신청은 ‘신청 지우기’로 지웁니다." })
+        el("h1", { text: "예약 관리" }), msg, listBox, blocker, opener,
+        el("p", { class: "src", text: "새 신청이 오면 휴대폰 알림 앱(ntfy)으로 날짜와 시간만 알려 줍니다. 이름 · 연락처 · 희망 장소는 이 화면에서 확인해 주세요. 상담으로 이어지지 않은 신청은 ‘신청 지우기’로 지웁니다." })
       ]);
     });
   }
@@ -606,7 +806,7 @@
         var enter = function () {
           if (me.role === "advisor") return viewAdvisor(me);
           if (me.status !== "contracted") return viewWaiting(me);
-          return openOwnWorksheet(me).then(function (n) { show(n); });
+          return viewClientHome(me).then(function (n) { show(n); });
         };
         if (!c.length || !c[0].agreed) return viewConsent(function () { Promise.resolve(enter()).then(null, fail); });
         return enter();

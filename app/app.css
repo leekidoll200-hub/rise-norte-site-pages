@@ -113,3 +113,18 @@
 .day-head p { font-weight: 700; margin-right: auto; }
 .panel .sec-box .wide.blocked { background: var(--surface-raised); }
 .panel .sec-box .wide.blocked > label { color: var(--ink-muted); text-decoration: line-through; }
+/* 예약 관리: 날짜마다 접었다 펴기 */
+details.day > summary { cursor: pointer; padding: 14px var(--space-4); font-weight: 600; list-style: none; position: relative; padding-right: 44px; }
+details.day > summary::-webkit-details-marker { display: none; }
+details.day > summary::after { content: ""; position: absolute; right: 20px; top: 20px; width: 8px; height: 8px; border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: rotate(45deg); }
+details.day[open] > summary::after { transform: rotate(-135deg); top: 24px; }
+details.day.has-booking > summary { color: var(--accent); }
+details.day.all-blocked > summary { color: var(--ink-muted); text-decoration: line-through; }
+details.day .day-head { padding-top: 0; }
+details.day .day-head:empty { display: none; }
+details.panel > summary { cursor: pointer; font-weight: 600; }
+details.panel[open] > summary { margin-bottom: var(--space-4); }
+/* 상담 동의 · 후기 */
+.panel details > summary.link-btn { cursor: pointer; list-style: none; display: inline-block; }
+.panel details[open] { display: grid; gap: var(--space-4); }
+.tabs { flex-wrap: wrap; }

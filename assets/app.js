@@ -191,17 +191,16 @@
   renderFilters();
   renderCases();
 
-  /* ---------- 상담 예약: 달력에서 열린 시간을 골라 신청 ----------
-     열린 시간은 담당자가 로그인 뒤 화면(예약 관리)에서 연다. 방문자는 열린 시간만 볼 수 있고,
-     신청은 데이터베이스의 book_consult 함수로만 들어간다(이름 · 연락처는 방문자가 다시 읽을 수 없다). */
+  /* ---------- 상담 예약: 달력에서 날짜를 고르고 10분 단위로 시작 시간을 고른다 ----------
+     여는 요일 · 시간대는 담당자가 정해 두고(기본으로 열림), 이미 찬 구간과 막은 구간만 빠진다.
+     달력은 open_days 함수로 규칙과 찬 구간만 읽는다(누구의 예약인지는 오지 않는다).
+     신청은 book_consult 함수로만 들어가고, 겹치는 시간은 데이터베이스가 거절한다. */
   var form = $("applyForm");
   var done = $("applyDone");
   var SB = CONFIG.supabaseUrl, SBK = CONFIG.supabaseKey;
-  var CONSENT_VERSION = "2026-11-18";
+  var CONSENT_VERSION = "2026-11-19";
   var cal = $("cal");
-  var byDay = {}, dayKeys = [], month = null, pickedDay = null, pickedSlot = null, wishMode = false;
-  var wishInput = el("input"); wishInput.type = "text"; wishInput.maxLength = 100; wishInput.placeholder = "예) 다음 주 평일 저녁 7시 이후";
-  wishInput.setAttribute("aria-label", "원하는 날짜와 시간대");
+  var rule = null, busy = [], freeByDay = {}, dayKeys = [], month = null, pickedDay = null, pickedHour = null, pickedAt = null;
 
   var fmtKey = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" });
   var fmtTime = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "numeric", minute: "2-digit" });
@@ -217,21 +216,39 @@
       });
     });
   }
+  function toMin(hm) { return Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5)); }
+  function kstHour(d) { return Math.floor(((d.getTime() + 9 * 3600000) % 86400000) / 3600000); }
+  function hourLabel(h) { return h === 12 ? "낮 12시" : (h < 12 ? "오전 " : "오후 ") + (h % 12) + "시"; }
+  /* 날짜마다 고를 수 있는 시작 시간(10분 단위)을 계산한다 */
+  function compute() {
+    freeByDay = {}; dayKeys = [];
+    if (!rule || !rule.enabled) return;
+    var base = new Date(fmtKey.format(new Date()) + "T00:00:00+09:00").getTime();
+    var first = toMin(rule.first), last = toMin(rule.last), len = rule.minutes * 60000;
+    for (var i = 1; i <= rule.days_ahead; i++) {
+      var dayStart = base + i * 86400000, key = fmtKey.format(new Date(dayStart));
+      if (rule.weekdays.indexOf(new Date(key + "T00:00:00Z").getUTCDay()) === -1) continue;
+      var list = [];
+      for (var m = first; m <= last; m += 10) {
+        var s = dayStart + m * 60000, e = s + len, clash = false;
+        for (var b = 0; b < busy.length; b++) { if (s < busy[b][1] && e > busy[b][0]) { clash = true; break; } }
+        if (!clash) list.push(new Date(s));
+      }
+      if (list.length) { freeByDay[key] = list; dayKeys.push(key); }
+    }
+  }
   function loadSlots() {
     cal.textContent = ""; cal.appendChild(el("p", "src", "열린 시간을 불러오는 중입니다."));
-    return sb("slots?select=id,starts_at,minutes&order=starts_at").then(function (rows) {
-      byDay = {}; dayKeys = [];
-      rows.forEach(function (r) {
-        var d = new Date(r.starts_at), k = fmtKey.format(d);
-        if (!byDay[k]) { byDay[k] = []; dayKeys.push(k); }
-        byDay[k].push({ id: r.id, at: d, minutes: r.minutes });
-      });
-      if (pickedSlot && !rows.some(function (r) { return r.id === pickedSlot.id; })) pickedSlot = null;
-      if (pickedDay && !byDay[pickedDay]) pickedDay = null;
+    return sb("rpc/open_days", { method: "POST", body: "{}" }).then(function (res) {
+      rule = res && res.rule; busy = ((res && res.busy) || []).map(function (b) { return [new Date(b[0]).getTime(), new Date(b[1]).getTime()]; });
+      compute();
+      if (pickedDay && !freeByDay[pickedDay]) { pickedDay = null; pickedHour = null; }
+      if (pickedAt && !(freeByDay[pickedDay] || []).some(function (d) { return d.getTime() === pickedAt.getTime(); })) pickedAt = null;
       if (!month || !dayKeys.some(function (k) { return k.slice(0, 7) === month; })) month = dayKeys.length ? dayKeys[0].slice(0, 7) : fmtKey.format(new Date()).slice(0, 7);
       drawCal();
     }, function () {
-      wishMode = true; byDay = {}; dayKeys = []; drawCal("열린 시간을 불러오지 못했습니다. 원하는 날짜와 시간대를 적어 주세요.");
+      rule = null; busy = []; compute(); month = month || fmtKey.format(new Date()).slice(0, 7);
+      drawCal("열린 시간을 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.");
     });
   }
   function shiftMonth(n) {
@@ -243,62 +260,65 @@
   function drawCal(note) {
     cal.textContent = "";
     if (note) cal.appendChild(el("p", "cal-note", note));
-    {
-      var y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7));
-      var months = dayKeys.map(function (k) { return k.slice(0, 7); });
-      if (!months.length) months = [month];
-      var head = el("div", "cal-head");
-      var prev = el("button", "cal-nav", "‹"); prev.type = "button"; prev.setAttribute("aria-label", "이전 달"); prev.disabled = month <= months[0];
-      var next = el("button", "cal-nav", "›"); next.type = "button"; next.setAttribute("aria-label", "다음 달"); next.disabled = month >= months[months.length - 1];
-      prev.addEventListener("click", function () { shiftMonth(-1); }); next.addEventListener("click", function () { shiftMonth(1); });
-      head.appendChild(prev); head.appendChild(el("p", "cal-title", y + "년 " + m + "월")); head.appendChild(next);
-      cal.appendChild(head);
-      var grid = el("div", "cal-grid");
-      ["일", "월", "화", "수", "목", "금", "토"].forEach(function (w) { grid.appendChild(el("span", "cal-w", w)); });
-      var first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay(), last = new Date(Date.UTC(y, m, 0)).getUTCDate();
-      for (var i = 0; i < first; i++) grid.appendChild(el("span", "cal-x"));
-      for (var d = 1; d <= last; d++) {
-        (function (d) {
-          var key = month + "-" + String(d).padStart(2, "0");
-          var b = el("button", "cal-d", String(d)); b.type = "button";
-          if (byDay[key]) {
-            b.classList.add("open");
-            b.setAttribute("aria-label", m + "월 " + d + "일 · 열린 시간 " + byDay[key].length + "개");
-            if (key === pickedDay) b.setAttribute("aria-pressed", "true");
-            b.addEventListener("click", function () { pickedDay = key; pickedSlot = null; wishMode = false; drawCal(); });
-          } else { b.disabled = true; }
-          grid.appendChild(b);
-        })(d);
-      }
-      cal.appendChild(grid);
-      cal.appendChild(el("p", dayKeys.length ? "cal-legend" : "cal-note", dayKeys.length
-        ? "골드 점이 있는 날에 열린 시간이 있습니다. 날짜를 누르면 시간이 나옵니다."
-        : "아직 열린 시간이 없습니다. 시간이 열리면 날짜에 골드 점이 생기고, 눌러서 예약할 수 있습니다."));
-      if (pickedDay && byDay[pickedDay]) {
-        var box = el("div", "cal-times");
-        box.appendChild(el("p", "cal-day", fmtDay.format(byDay[pickedDay][0].at)));
-        var list = el("div", "cal-slots");
-        byDay[pickedDay].forEach(function (sl) {
-          var t = el("button", "cal-t", fmtTime.format(sl.at)); t.type = "button";
-          if (pickedSlot && pickedSlot.id === sl.id) t.setAttribute("aria-pressed", "true");
-          t.addEventListener("click", function () { pickedSlot = sl; drawCal(); $("e-when").hidden = true; });
-          list.appendChild(t);
+    var y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7));
+    var months = dayKeys.map(function (k) { return k.slice(0, 7); });
+    if (!months.length) months = [month];
+    var head = el("div", "cal-head");
+    var prev = el("button", "cal-nav", "‹"); prev.type = "button"; prev.setAttribute("aria-label", "이전 달"); prev.disabled = month <= months[0];
+    var next = el("button", "cal-nav", "›"); next.type = "button"; next.setAttribute("aria-label", "다음 달"); next.disabled = month >= months[months.length - 1];
+    prev.addEventListener("click", function () { shiftMonth(-1); }); next.addEventListener("click", function () { shiftMonth(1); });
+    head.appendChild(prev); head.appendChild(el("p", "cal-title", y + "년 " + m + "월")); head.appendChild(next);
+    cal.appendChild(head);
+    var grid = el("div", "cal-grid");
+    ["일", "월", "화", "수", "목", "금", "토"].forEach(function (w) { grid.appendChild(el("span", "cal-w", w)); });
+    var first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay(), last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    for (var i = 0; i < first; i++) grid.appendChild(el("span", "cal-x"));
+    for (var d = 1; d <= last; d++) {
+      (function (d) {
+        var key = month + "-" + String(d).padStart(2, "0");
+        var b = el("button", "cal-d", String(d)); b.type = "button";
+        if (freeByDay[key]) {
+          b.classList.add("open");
+          b.setAttribute("aria-label", m + "월 " + d + "일 · 예약할 수 있음");
+          if (key === pickedDay) b.setAttribute("aria-pressed", "true");
+          b.addEventListener("click", function () { pickedDay = key; pickedHour = null; pickedAt = null; drawCal(); });
+        } else { b.disabled = true; }
+        grid.appendChild(b);
+      })(d);
+    }
+    cal.appendChild(grid);
+    if (!note) cal.appendChild(el("p", dayKeys.length ? "cal-legend" : "cal-note", dayKeys.length
+      ? "골드 점이 있는 날에 예약할 수 있습니다. 날짜를 누르면 시간이 나옵니다."
+      : "지금은 예약할 수 있는 시간이 없습니다."));
+    if (pickedDay && freeByDay[pickedDay]) {
+      var free = freeByDay[pickedDay];
+      var box = el("div", "cal-times");
+      box.appendChild(el("p", "cal-day", fmtDay.format(free[0])));
+      box.appendChild(el("p", "sub", "몇 시쯤이 좋으세요?"));
+      var hours = [], seen = {};
+      free.forEach(function (t) { var h = kstHour(t); if (!seen[h]) { seen[h] = true; hours.push(h); } });
+      var hl = el("div", "cal-slots");
+      hours.forEach(function (h) {
+        var t = el("button", "cal-t", hourLabel(h)); t.type = "button";
+        if (pickedHour === h) t.setAttribute("aria-pressed", "true");
+        t.addEventListener("click", function () { pickedHour = h; pickedAt = null; drawCal(); });
+        hl.appendChild(t);
+      });
+      box.appendChild(hl);
+      if (pickedHour !== null) {
+        box.appendChild(el("p", "sub", "시작 시간 (10분 단위)"));
+        var ml = el("div", "cal-slots");
+        free.filter(function (t) { return kstHour(t) === pickedHour; }).forEach(function (at) {
+          var t = el("button", "cal-t cal-m", fmtTime.format(at)); t.type = "button";
+          if (pickedAt && pickedAt.getTime() === at.getTime()) t.setAttribute("aria-pressed", "true");
+          t.addEventListener("click", function () { pickedAt = at; drawCal(); $("e-when").hidden = true; });
+          ml.appendChild(t);
         });
-        box.appendChild(list);
-        cal.appendChild(box);
+        box.appendChild(ml);
       }
-      if (pickedSlot) cal.appendChild(el("p", "cal-picked", "고른 시간: " + fmtDay.format(pickedSlot.at) + " " + fmtTime.format(pickedSlot.at) + " (약 " + pickedSlot.minutes + "분)"));
-      var alt = el("button", "link", wishMode ? "달력에서 고르기" : "맞는 시간이 없으면 원하는 때를 적어 주세요");
-      alt.type = "button";
-      alt.addEventListener("click", function () { wishMode = !wishMode; if (wishMode) pickedSlot = null; drawCal(); });
-      cal.appendChild(alt);
+      cal.appendChild(box);
     }
-    if (wishMode) {
-      var w = el("div", "cal-wish");
-      w.appendChild(el("p", "sub", "원하는 날짜와 시간대"));
-      w.appendChild(wishInput);
-      cal.appendChild(w);
-    }
+    if (pickedAt) cal.appendChild(el("p", "cal-picked", "고른 시간: " + fmtDay.format(pickedAt) + " " + fmtTime.format(pickedAt) + " (약 " + rule.minutes + "분)"));
   }
 
   function setErr(inputId, errId, bad) {
@@ -308,7 +328,7 @@
   }
   var MESSAGES = {
     NAME: "이름을 확인해 주세요.", PHONE: "휴대폰 번호를 확인해 주세요.", CONSENT: "동의가 필요합니다.", WHEN: "날짜와 시간을 골라 주세요.",
-    TAKEN: "방금 다른 분이 그 시간을 먼저 예약했습니다. 다른 시간을 골라 주세요.",
+    TAKEN: "방금 그 시간이 찼습니다. 다른 시간을 골라 주세요.",
     LIMIT_PHONE: "같은 번호로는 하루에 세 번까지 신청할 수 있습니다.", LIMIT_ALL: "신청이 몰리고 있습니다. 잠시 뒤 다시 시도해 주세요."
   };
   var sending = false;
@@ -318,11 +338,10 @@
     var name = $("f-name").value.trim();
     var tel = $("f-tel").value.trim();
     var digits = tel.replace(/\D/g, "");
-    var wish = wishMode ? wishInput.value.trim() : "";
     var bad = [
+      setErr(null, "e-when", !pickedAt) && "cal",
       setErr("f-name", "e-name", !name) && "f-name",
       setErr("f-tel", "e-tel", !/^01\d{8,9}$/.test(digits)) && "f-tel",
-      setErr(null, "e-when", !pickedSlot && !wish) && "cal",
       setErr("f-agree", "e-agree", !$("f-agree").checked) && "f-agree"
     ].filter(Boolean);
     $("e-send").hidden = true;
@@ -331,25 +350,24 @@
     var topics = Array.prototype.map.call(form.querySelectorAll('input[name="topic"]:checked'), function (i) { return i.value; });
     var btn = form.querySelector('button[type="submit"]');
     sending = true; btn.disabled = true; btn.textContent = "보내는 중…";
-    var slot = pickedSlot;
+    var at = pickedAt;
     sb("rpc/book_consult", { method: "POST", body: JSON.stringify({
-      p_slot: slot ? slot.id : null, p_name: name, p_phone: digits, p_topics: topics, p_channel: $("f-ch").value || null,
-      p_check: checked.length ? checked.join(" / ") : null, p_wish: wish || null, p_consent: CONSENT_VERSION
+      p_start: at.toISOString(), p_name: name, p_phone: digits, p_topics: topics, p_channel: $("f-ch").value || null,
+      p_check: checked.length ? checked.join(" / ") : null,
+      p_place: $("f-place").value.trim() || null, p_memo: $("f-memo").value.trim() || null, p_consent: CONSENT_VERSION
     }) }).then(function () {
-      $("doneTitle").textContent = slot ? "예약이 접수됐습니다" : "신청이 접수됐습니다";
-      $("doneText").textContent = slot
-        ? fmtDay.format(slot.at) + " " + fmtTime.format(slot.at) + "에 잡아 두었습니다. 장소와 준비할 것은 남겨 주신 번호로 확인 연락을 드립니다."
-        : "적어 주신 시간대를 보고 남겨 주신 번호로 연락드려 일정을 정합니다.";
+      $("doneTitle").textContent = "예약이 접수됐습니다";
+      $("doneText").textContent = fmtDay.format(at) + " " + fmtTime.format(at) + "에 잡아 두었습니다. 장소는 남겨 주신 번호로 연락드려 함께 정합니다.";
       form.hidden = true; done.hidden = false; done.focus();
-      form.reset(); pickedSlot = null; pickedDay = null; wishInput.value = "";
+      form.reset(); pickedAt = null; pickedHour = null; pickedDay = null;
     }, function (err) {
       var box = $("e-send"); box.textContent = MESSAGES[err.code] || "보내지 못했습니다. 잠시 뒤 다시 시도해 주세요."; box.hidden = false;
-      if (err.code === "TAKEN") { pickedSlot = null; loadSlots(); }
+      if (err.code === "TAKEN") { pickedAt = null; loadSlots(); }
     }).then(function () { sending = false; btn.disabled = false; btn.textContent = "상담 신청하기"; });
   });
 
   $("doneBack").addEventListener("click", function () {
     done.hidden = true; form.hidden = false; loadSlots();
   });
-  if (SB && SBK) loadSlots(); else { wishMode = true; drawCal("예약 설정이 빠져 있습니다."); }
+  if (SB && SBK) loadSlots(); else { month = fmtKey.format(new Date()).slice(0, 7); drawCal("예약 설정이 빠져 있습니다."); }
 })();
