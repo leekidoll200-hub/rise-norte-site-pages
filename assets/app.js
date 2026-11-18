@@ -229,7 +229,6 @@
       if (pickedSlot && !rows.some(function (r) { return r.id === pickedSlot.id; })) pickedSlot = null;
       if (pickedDay && !byDay[pickedDay]) pickedDay = null;
       if (!month || !dayKeys.some(function (k) { return k.slice(0, 7) === month; })) month = dayKeys.length ? dayKeys[0].slice(0, 7) : fmtKey.format(new Date()).slice(0, 7);
-      if (!dayKeys.length) wishMode = true;
       drawCal();
     }, function () {
       wishMode = true; byDay = {}; dayKeys = []; drawCal("열린 시간을 불러오지 못했습니다. 원하는 날짜와 시간대를 적어 주세요.");
@@ -244,9 +243,10 @@
   function drawCal(note) {
     cal.textContent = "";
     if (note) cal.appendChild(el("p", "cal-note", note));
-    if (dayKeys.length) {
+    {
       var y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7));
       var months = dayKeys.map(function (k) { return k.slice(0, 7); });
+      if (!months.length) months = [month];
       var head = el("div", "cal-head");
       var prev = el("button", "cal-nav", "‹"); prev.type = "button"; prev.setAttribute("aria-label", "이전 달"); prev.disabled = month <= months[0];
       var next = el("button", "cal-nav", "›"); next.type = "button"; next.setAttribute("aria-label", "다음 달"); next.disabled = month >= months[months.length - 1];
@@ -271,7 +271,9 @@
         })(d);
       }
       cal.appendChild(grid);
-      cal.appendChild(el("p", "cal-legend", "골드 점이 있는 날에 열린 시간이 있습니다."));
+      cal.appendChild(el("p", dayKeys.length ? "cal-legend" : "cal-note", dayKeys.length
+        ? "골드 점이 있는 날에 열린 시간이 있습니다. 날짜를 누르면 시간이 나옵니다."
+        : "아직 열린 시간이 없습니다. 시간이 열리면 날짜에 골드 점이 생기고, 눌러서 예약할 수 있습니다."));
       if (pickedDay && byDay[pickedDay]) {
         var box = el("div", "cal-times");
         box.appendChild(el("p", "cal-day", fmtDay.format(byDay[pickedDay][0].at)));
@@ -286,12 +288,10 @@
         cal.appendChild(box);
       }
       if (pickedSlot) cal.appendChild(el("p", "cal-picked", "고른 시간: " + fmtDay.format(pickedSlot.at) + " " + fmtTime.format(pickedSlot.at) + " (약 " + pickedSlot.minutes + "분)"));
-      var alt = el("button", "link", wishMode ? "달력에서 고르기" : "맞는 시간이 없어요");
+      var alt = el("button", "link", wishMode ? "달력에서 고르기" : "맞는 시간이 없으면 원하는 때를 적어 주세요");
       alt.type = "button";
       alt.addEventListener("click", function () { wishMode = !wishMode; if (wishMode) pickedSlot = null; drawCal(); });
       cal.appendChild(alt);
-    } else if (!note) {
-      cal.appendChild(el("p", "cal-note", "지금 열린 시간이 없습니다. 원하는 날짜와 시간대를 적어 주시면 맞춰서 연락드립니다."));
     }
     if (wishMode) {
       var w = el("div", "cal-wish");

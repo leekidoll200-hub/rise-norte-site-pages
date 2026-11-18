@@ -453,8 +453,15 @@
       var msg = el("p", { class: "msg bad", hidden: true });
       function oops(e) { msg.textContent = e.message; msg.hidden = false; }
 
-      /* 시간 열기 */
-      var date = el("input", { type: "date", min: KST_KEY.format(new Date()), "aria-label": "날짜" });
+      /* 시간 열기: 하루 또는 여러 날을 한꺼번에 */
+      var today = KST_KEY.format(new Date());
+      var from = el("input", { type: "date", min: today, "aria-label": "시작 날짜" });
+      var to = el("input", { type: "date", min: today, "aria-label": "끝 날짜" });
+      var WEEK = ["일", "월", "화", "수", "목", "금", "토"];
+      var weekOn = { 1: true, 2: true, 3: true, 4: true, 5: true };
+      var weekChips = el("div", { class: "opts" }, [1, 2, 3, 4, 5, 6, 0].map(function (w) {
+        return el("label", {}, [el("input", { type: "checkbox", checked: !!weekOn[w], onchange: function (e) { weekOn[w] = e.target.checked; } }), el("span", { text: WEEK[w] })]);
+      }));
       var picked = {};
       var chips = el("div", { class: "opts" }, PRESET_TIMES.map(function (t) {
         return el("label", {}, [el("input", { type: "checkbox", onchange: function (e) { picked[t] = e.target.checked; } }), el("span", { text: t })]);
@@ -462,10 +469,23 @@
       var custom = el("input", { type: "time", "aria-label": "다른 시간" });
       var minutes = el("select", { "aria-label": "상담 길이" }, [60, 90, 120].map(function (m) { return el("option", { value: String(m), text: m + "분" }); }));
       minutes.value = "90";
+      function dayList() {
+        if (!from.value) return [];
+        var end = to.value && to.value >= from.value ? to.value : from.value;
+        var out = [], d = new Date(from.value + "T00:00:00Z"), last = new Date(end + "T00:00:00Z");
+        var single = end === from.value;
+        while (d <= last && out.length < 92) {
+          if (single || weekOn[d.getUTCDay()]) out.push(d.toISOString().slice(0, 10));
+          d = new Date(d.getTime() + 86400000);
+        }
+        return out;
+      }
       var opener = el("div", { class: "panel" }, [
         el("h2", { text: "예약 시간 열기" }),
-        el("p", { class: "muted", text: "날짜를 고르고 시간을 눌러 ‘열기’를 누르면, 고객의 상담 신청 달력에 그 시간이 나타납니다." }),
-        el("div", { class: "wide" }, [el("label", { text: "날짜" }), date]),
+        el("p", { class: "muted", text: "여기서 연 시간만 고객의 달력에 나타납니다. 열지 않은 시간은 처음부터 예약할 수 없습니다. 하루만 열 때는 시작 날짜만, 여러 날을 한꺼번에 열 때는 끝 날짜와 요일까지 고릅니다." }),
+        el("div", { class: "wide" }, [el("label", { text: "시작 날짜" }), from]),
+        el("div", { class: "wide" }, [el("label", { text: "끝 날짜 (여러 날을 열 때만)" }), to]),
+        el("div", { class: "q" }, [el("p", { text: "요일 (여러 날을 열 때 적용)" }), weekChips]),
         el("div", { class: "q" }, [el("p", { text: "시간 (여러 개 가능)" }), chips]),
         el("div", { class: "wide" }, [el("label", { text: "다른 시간 (선택)" }), custom]),
         el("div", { class: "wide" }, [el("label", { text: "상담 길이" }), minutes]),
@@ -473,12 +493,17 @@
           class: "btn btn-main", type: "button", text: "열기", onclick: function () {
             var times = PRESET_TIMES.filter(function (t) { return picked[t]; });
             if (custom.value && times.indexOf(custom.value) === -1) times.push(custom.value);
-            if (!date.value || !times.length) return oops(new Error("날짜와 시간을 골라 주세요."));
-            var rows = times.map(function (t) { return { starts_at: new Date(date.value + "T" + t + ":00+09:00").toISOString(), minutes: Number(minutes.value) }; });
-            if (rows.some(function (r) { return new Date(r.starts_at) <= new Date(); })) return oops(new Error("지난 시간은 열 수 없습니다."));
-            rest("POST", "slots", rows).then(reload, function (e) {
-              oops(/duplicate|unique/i.test(e.message) ? new Error("이미 열려 있는 시간이 들어 있습니다. 그 시간을 빼고 다시 눌러 주세요.") : e);
-            });
+            var dates = dayList();
+            if (!dates.length || !times.length) return oops(new Error("날짜와 시간을 골라 주세요. (여러 날을 열 때는 요일도 확인해 주세요)"));
+            var now = new Date(), rows = [];
+            dates.forEach(function (d) { times.forEach(function (t) {
+              var at = new Date(d + "T" + t + ":00+09:00");
+              if (at > now) rows.push({ starts_at: at.toISOString(), minutes: Number(minutes.value) });
+            }); });
+            if (!rows.length) return oops(new Error("지난 시간은 열 수 없습니다."));
+            if (rows.length > 300) return oops(new Error("한 번에 300개까지만 열 수 있습니다. 기간을 나눠 주세요."));
+            if (rows.length > 20 && !confirm(dates.length + "일 · 모두 " + rows.length + "개 시간을 엽니다. 이미 있는 시간은 그대로 둡니다. 열까요?")) return;
+            rest("POST", "slots?on_conflict=starts_at", rows, "resolution=ignore-duplicates").then(reload, oops);
           }
         })
       ]);
@@ -512,10 +537,17 @@
       var listBox = el("div", { class: "panel" }, [el("h2", { text: "열어 둔 시간과 예약" })]);
       if (!order.length) listBox.appendChild(el("p", { class: "muted", text: "열어 둔 시간이 없습니다. 위에서 시간을 열어 주세요." }));
       order.forEach(function (k) {
-        var box = el("div", { class: "sec-box" }, [el("p", { class: "sec-note", style: "padding-top:12px;font-weight:700;color:inherit", text: KST_DAY.format(new Date(days[k][0].starts_at)) })]);
+        var openIds = days[k].filter(function (x) { return x.status === "open"; }).map(function (x) { return x.id; });
+        var closedIds = days[k].filter(function (x) { return x.status === "closed"; }).map(function (x) { return x.id; });
+        function setMany(ids, st) { return function () { rest("PATCH", "slots?id=in.(" + ids.join(",") + ")", { status: st }).then(reload, oops); }; }
+        var box = el("div", { class: "sec-box" }, [el("div", { class: "day-head" }, [
+          el("p", { text: KST_DAY.format(new Date(days[k][0].starts_at)) }),
+          openIds.length ? el("button", { class: "link-btn", type: "button", text: "이 날 전체 막기", onclick: setMany(openIds, "closed") }) : null,
+          closedIds.length ? el("button", { class: "link-btn", type: "button", text: "막은 시간 다시 열기", onclick: setMany(closedIds, "open") }) : null
+        ])]);
         days[k].forEach(function (sl) {
           var b = bySlot[sl.id];
-          var label = KST_TIME.format(new Date(sl.starts_at)) + " · " + sl.minutes + "분 · " + (b ? "예약됨" : sl.status === "open" ? "열림" : "닫힘");
+          var label = KST_TIME.format(new Date(sl.starts_at)) + " · " + sl.minutes + "분 · " + (b ? "예약됨" : sl.status === "open" ? "열림" : "막음");
           var row = el("div", { class: "wide" }, [el("label", { text: label })]);
           if (b) {
             row.appendChild(bookingBox(b));
@@ -525,7 +557,13 @@
               el("button", { class: "link-btn", type: "button", text: "신청 지우기", onclick: removeBooking(b) })
             ]));
           } else {
-            row.appendChild(el("button", { class: "link-btn", type: "button", text: "이 시간 닫기", onclick: function () { rest("DELETE", "slots?id=eq." + sl.id).then(reload, oops); } }));
+            if (sl.status !== "open") row.classList.add("blocked");
+            row.appendChild(el("div", { style: "display:flex;flex-wrap:wrap;gap:16px" }, [
+              sl.status === "open"
+                ? el("button", { class: "link-btn", type: "button", text: "막기", onclick: function () { rest("PATCH", "slots?id=eq." + sl.id, { status: "closed" }).then(reload, oops); } })
+                : el("button", { class: "link-btn", type: "button", text: "다시 열기", onclick: function () { rest("PATCH", "slots?id=eq." + sl.id, { status: "open" }).then(reload, oops); } }),
+              el("button", { class: "link-btn", type: "button", text: "지우기", onclick: function () { rest("DELETE", "slots?id=eq." + sl.id).then(reload, oops); } })
+            ]));
           }
           box.appendChild(row);
         });
@@ -545,7 +583,7 @@
 
       return el("section", { style: "display:grid;gap:24px" }, [
         el("h1", { text: "예약 관리" }), msg, opener, listBox, looseBox,
-        el("p", { class: "src", text: "새 신청이 와도 알림은 가지 않습니다. 이 화면을 열어 확인해 주세요. 상담으로 이어지지 않은 신청은 ‘신청 지우기’로 지웁니다." })
+        el("p", { class: "src", text: "‘막기’를 누른 시간은 고객의 달력에서 사라지고, ‘다시 열기’를 누르면 다시 나타납니다. 새 신청이 와도 알림은 가지 않으니 이 화면을 열어 확인해 주세요. 상담으로 이어지지 않은 신청은 ‘신청 지우기’로 지웁니다." })
       ]);
     });
   }
