@@ -6,5 +6,11 @@ window.RN_CONFIG = {
 
   // 상담 신청을 보낼 주소. 비어 있으면 미리보기(아무 데도 보내지 않음).
   // 전송 방식을 정한 뒤에 채운다 → README '상담 신청 전송 방식'.
-  formEndpoint: ""
+  formEndpoint: "",
+
+  // Supabase 프로젝트(로그인 · 고객 데이터). 여기 적는 것은 공개해도 되는 값뿐이다.
+  // 관리자 키(service_role · secret)와 데이터베이스 비밀번호는 절대 이 파일 · 저장소에 넣지 않는다.
+  // 누가 무엇을 볼 수 있는지는 데이터베이스 권한(RLS)이 막는다 → supabase/schema_draft.sql
+  supabaseUrl: "https://cyghwusriftgqbaonywd.supabase.co",
+  supabaseKey: "sb_publishable_QgeW8-4Vu_DVjm5orJzMFg_R8ExV-4Q"
 };
