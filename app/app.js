@@ -385,17 +385,17 @@
   /* ---------- 화면: 담당자 ---------- */
   var STATUS = [["lead", "신청"], ["lecture", "강의 참석"], ["contracted", "계약 고객"], ["ended", "관리 종료"]];
   function viewAdvisor(me) {
-    var tab = "list"; var holder = el("div");
+    var tab = "book"; var holder = el("div");
     var tabs = el("div", { class: "tabs" });
     function drawTabs() {
       tabs.textContent = "";
-      [["list", "고객 목록"], ["mine", "작성지 시험 (내 계정)"]].forEach(function (t) {
+      [["book", "예약 관리"], ["list", "고객 목록"], ["mine", "작성지 시험 (내 계정)"]].forEach(function (t) {
         tabs.appendChild(el("button", { type: "button", "aria-pressed": String(tab === t[0]), text: t[1], onclick: function () { tab = t[0]; drawTabs(); go(); } }));
       });
     }
     function go() {
       holder.textContent = ""; holder.appendChild(el("p", { class: "muted", text: "불러오는 중입니다." }));
-      var p = tab === "mine" ? openOwnWorksheet(me, { advisor: true }) : list();
+      var p = tab === "mine" ? openOwnWorksheet(me, { advisor: true }) : tab === "book" ? viewBookings(go) : list();
       p.then(function (n) { holder.textContent = ""; holder.appendChild(n); }, function (e) { holder.textContent = ""; holder.appendChild(el("p", { class: "msg bad", text: e.message })); });
     }
     function list() {
@@ -433,6 +433,121 @@
     }
     drawTabs(); go();
     show(tabs, holder);
+  }
+
+  /* ---------- 화면: 예약 관리 (담당자) ---------- */
+  var KST_KEY = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" });
+  var KST_TIME = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "numeric", minute: "2-digit" });
+  var KST_DAY = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short" });
+  var PRESET_TIMES = ["10:00", "13:00", "15:00", "17:00", "19:30"];
+  var BOOK_STATUS = { "new": "새 신청", confirmed: "확정", done: "상담함", cancelled: "취소" };
+
+  function viewBookings(reload) {
+    var since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    return Promise.all([
+      rest("GET", "slots?select=*&starts_at=gte." + encodeURIComponent(since) + "&order=starts_at"),
+      rest("GET", "bookings?select=*&order=created_at.desc")
+    ]).then(function (res) {
+      var slots = res[0], bookings = res[1];
+      var bySlot = {}; bookings.forEach(function (b) { if (b.slot_id) bySlot[b.slot_id] = b; });
+      var msg = el("p", { class: "msg bad", hidden: true });
+      function oops(e) { msg.textContent = e.message; msg.hidden = false; }
+
+      /* 시간 열기 */
+      var date = el("input", { type: "date", min: KST_KEY.format(new Date()), "aria-label": "날짜" });
+      var picked = {};
+      var chips = el("div", { class: "opts" }, PRESET_TIMES.map(function (t) {
+        return el("label", {}, [el("input", { type: "checkbox", onchange: function (e) { picked[t] = e.target.checked; } }), el("span", { text: t })]);
+      }));
+      var custom = el("input", { type: "time", "aria-label": "다른 시간" });
+      var minutes = el("select", { "aria-label": "상담 길이" }, [60, 90, 120].map(function (m) { return el("option", { value: String(m), text: m + "분" }); }));
+      minutes.value = "90";
+      var opener = el("div", { class: "panel" }, [
+        el("h2", { text: "예약 시간 열기" }),
+        el("p", { class: "muted", text: "날짜를 고르고 시간을 눌러 ‘열기’를 누르면, 고객의 상담 신청 달력에 그 시간이 나타납니다." }),
+        el("div", { class: "wide" }, [el("label", { text: "날짜" }), date]),
+        el("div", { class: "q" }, [el("p", { text: "시간 (여러 개 가능)" }), chips]),
+        el("div", { class: "wide" }, [el("label", { text: "다른 시간 (선택)" }), custom]),
+        el("div", { class: "wide" }, [el("label", { text: "상담 길이" }), minutes]),
+        el("button", {
+          class: "btn btn-main", type: "button", text: "열기", onclick: function () {
+            var times = PRESET_TIMES.filter(function (t) { return picked[t]; });
+            if (custom.value && times.indexOf(custom.value) === -1) times.push(custom.value);
+            if (!date.value || !times.length) return oops(new Error("날짜와 시간을 골라 주세요."));
+            var rows = times.map(function (t) { return { starts_at: new Date(date.value + "T" + t + ":00+09:00").toISOString(), minutes: Number(minutes.value) }; });
+            if (rows.some(function (r) { return new Date(r.starts_at) <= new Date(); })) return oops(new Error("지난 시간은 열 수 없습니다."));
+            rest("POST", "slots", rows).then(reload, function (e) {
+              oops(/duplicate|unique/i.test(e.message) ? new Error("이미 열려 있는 시간이 들어 있습니다. 그 시간을 빼고 다시 눌러 주세요.") : e);
+            });
+          }
+        })
+      ]);
+
+      /* 열린 시간과 예약 */
+      function bookingBox(b) {
+        return el("dl", { class: "kv" }, [
+          el("dt", { text: "이름" }), el("dd", { text: b.name }),
+          el("dt", { text: "연락처" }), el("dd", { text: b.phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") }),
+          b.wish ? el("dt", { text: "원하는 때" }) : null, b.wish ? el("dd", { text: b.wish }) : null,
+          el("dt", { text: "관심 주제" }), el("dd", { text: (b.topics || []).join(" · ") || "—" }),
+          b.check_result ? el("dt", { text: "자가 점검" }) : null, b.check_result ? el("dd", { text: b.check_result }) : null,
+          el("dt", { text: "만난 경로" }), el("dd", { text: b.channel || "—" }),
+          el("dt", { text: "신청한 때" }), el("dd", { text: stamp(b.created_at) + " · " + (BOOK_STATUS[b.status] || b.status) })
+        ]);
+      }
+      function setStatus(b, st) { return function () { rest("PATCH", "bookings?id=eq." + b.id, { status: st }).then(reload, oops); }; }
+      function removeBooking(b) {
+        return function () {
+          if (!confirm(b.name + " 님의 신청 정보를 지웁니다. 되돌릴 수 없습니다. 지울까요?")) return;
+          var reopen = b.slot_id && confirm("그 시간을 다시 열어 둘까요? (취소를 누르면 시간도 닫습니다)");
+          var slotId = b.slot_id;
+          rest("DELETE", "bookings?id=eq." + b.id).then(function () {
+            if (!slotId) return;
+            return reopen ? rest("PATCH", "slots?id=eq." + slotId, { status: "open" }) : rest("DELETE", "slots?id=eq." + slotId);
+          }).then(reload, oops);
+        };
+      }
+      var days = {}, order = [];
+      slots.forEach(function (sl) { var k = KST_KEY.format(new Date(sl.starts_at)); if (!days[k]) { days[k] = []; order.push(k); } days[k].push(sl); });
+      var listBox = el("div", { class: "panel" }, [el("h2", { text: "열어 둔 시간과 예약" })]);
+      if (!order.length) listBox.appendChild(el("p", { class: "muted", text: "열어 둔 시간이 없습니다. 위에서 시간을 열어 주세요." }));
+      order.forEach(function (k) {
+        var box = el("div", { class: "sec-box" }, [el("p", { class: "sec-note", style: "padding-top:12px;font-weight:700;color:inherit", text: KST_DAY.format(new Date(days[k][0].starts_at)) })]);
+        days[k].forEach(function (sl) {
+          var b = bySlot[sl.id];
+          var label = KST_TIME.format(new Date(sl.starts_at)) + " · " + sl.minutes + "분 · " + (b ? "예약됨" : sl.status === "open" ? "열림" : "닫힘");
+          var row = el("div", { class: "wide" }, [el("label", { text: label })]);
+          if (b) {
+            row.appendChild(bookingBox(b));
+            row.appendChild(el("div", { class: "opts", style: "display:flex;flex-wrap:wrap;gap:12px" }, [
+              b.status === "new" ? el("button", { class: "link-btn", type: "button", text: "확정으로 표시", onclick: setStatus(b, "confirmed") }) : null,
+              b.status !== "done" ? el("button", { class: "link-btn", type: "button", text: "상담함으로 표시", onclick: setStatus(b, "done") }) : null,
+              el("button", { class: "link-btn", type: "button", text: "신청 지우기", onclick: removeBooking(b) })
+            ]));
+          } else {
+            row.appendChild(el("button", { class: "link-btn", type: "button", text: "이 시간 닫기", onclick: function () { rest("DELETE", "slots?id=eq." + sl.id).then(reload, oops); } }));
+          }
+          box.appendChild(row);
+        });
+        listBox.appendChild(box);
+      });
+
+      /* 시간을 못 고른 신청 */
+      var loose = bookings.filter(function (b) { return !b.slot_id; });
+      var looseBox = el("div", { class: "panel" }, [el("h2", { text: "시간을 고르지 못한 신청" })]);
+      if (!loose.length) looseBox.appendChild(el("p", { class: "muted", text: "없습니다." }));
+      loose.forEach(function (b) {
+        looseBox.appendChild(el("div", { class: "sec-box" }, [bookingBox(b), el("div", { class: "wide", style: "display:flex;flex-wrap:wrap;gap:12px" }, [
+          b.status !== "done" ? el("button", { class: "link-btn", type: "button", text: "연락함으로 표시", onclick: setStatus(b, "done") }) : null,
+          el("button", { class: "link-btn", type: "button", text: "신청 지우기", onclick: removeBooking(b) })
+        ])]));
+      });
+
+      return el("section", { style: "display:grid;gap:24px" }, [
+        el("h1", { text: "예약 관리" }), msg, opener, listBox, looseBox,
+        el("p", { class: "src", text: "새 신청이 와도 알림은 가지 않습니다. 이 화면을 열어 확인해 주세요. 상담으로 이어지지 않은 신청은 ‘신청 지우기’로 지웁니다." })
+      ]);
+    });
   }
 
   /* ---------- 시작 ---------- */
