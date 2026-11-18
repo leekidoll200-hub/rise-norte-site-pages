@@ -75,6 +75,32 @@
     fetch(URL_ + "/auth/v1/logout", { method: "POST", headers: { apikey: KEY, Authorization: "Bearer " + t } }).then(done, done);
   }
 
+  /* 확인 상자: 브라우저의 확인 창(confirm · alert)은 앱 안 브라우저 등에서 막힐 수 있어서 화면 안에 직접 띄운다.
+     ask(글, 확인 단추 글) → 예 true / 아니오 false.  tell(글) → 알림만. */
+  function ask(message, okText, single) {
+    return new Promise(function (resolve) {
+      var back = document.createElement("div"); back.className = "ask-back";
+      var box = document.createElement("div"); box.className = "ask"; box.setAttribute("role", "alertdialog"); box.setAttribute("aria-modal", "true");
+      String(message).split("\n").forEach(function (line) { var p = document.createElement("p"); p.textContent = line; box.appendChild(p); });
+      var row = document.createElement("div"); row.className = "ask-row";
+      var yes = document.createElement("button"); yes.type = "button"; yes.className = "btn btn-main"; yes.textContent = okText || "예";
+      function done(v) { document.removeEventListener("keydown", onKey); back.remove(); resolve(v); }
+      function onKey(e) { if (e.key === "Escape") done(false); }
+      if (!single) {
+        var no = document.createElement("button"); no.type = "button"; no.className = "btn btn-line-dark"; no.textContent = "아니오";
+        no.addEventListener("click", function () { done(false); });
+        row.appendChild(no);
+      }
+      yes.addEventListener("click", function () { done(true); });
+      row.appendChild(yes); box.appendChild(row); back.appendChild(box);
+      back.addEventListener("click", function (e) { if (e.target === back) done(false); });
+      document.addEventListener("keydown", onKey);
+      document.body.appendChild(back);
+      yes.focus();
+    });
+  }
+  function tell(message) { return ask(message, "확인", true); }
+
   /* ---------- 데이터 ---------- */
   function rest(method, path, body, prefer) {
     return token().then(function (t) {
@@ -493,8 +519,7 @@
       kids.push(err); kids.push(btn);
       if (rv) kids.push(el("button", {
         class: "link-btn", type: "button", text: "이 후기 지우기", onclick: function () {
-          if (!confirm("적어 주신 후기를 지웁니다. 되돌릴 수 없습니다. 지울까요?")) return;
-          rest("DELETE", "reviews?id=eq." + rv.id).then(function () { reload("후기를 지웠습니다."); }, function (e) { err.textContent = e.message; err.hidden = false; });
+          ask("적어 주신 후기를 지웁니다. 되돌릴 수 없습니다. 지울까요?", "지우기").then(function (ok) { if (ok) rest("DELETE", "reviews?id=eq." + rv.id).then(function () { reload("후기를 지웠습니다."); }, function (e) { err.textContent = e.message; err.hidden = false; }); });
         }
       }));
       return el("section", { class: "panel" }, kids);
@@ -534,7 +559,7 @@
     function drawTabs() {
       tabs.textContent = "";
       [["book", "예약 관리"], ["list", "고객 목록"], ["reviews", "후기"], ["mine", "고객 화면 시험 (내 계정)"]].forEach(function (t) {
-        tabs.appendChild(el("button", { type: "button", "aria-pressed": String(tab === t[0]), text: t[1], onclick: function () { tab = t[0]; drawTabs(); go(); } }));
+        tabs.appendChild(el("button", { type: "button", "aria-pressed": String(tab === t[0]), text: t[1], onclick: function () { pickTab(t[0]); } }));
       });
     }
     function go() {
@@ -542,6 +567,7 @@
       var p = tab === "mine" ? viewClientHome(me, { advisor: true }) : tab === "book" ? viewBookings(go) : tab === "reviews" ? reviews() : list();
       p.then(function (n) { holder.textContent = ""; holder.appendChild(n); }, function (e) { holder.textContent = ""; holder.appendChild(el("p", { class: "msg bad", text: e.message })); });
     }
+    function pickTab(t) { tab = t; drawTabs(); window.scrollTo(0, 0); go(); }   // 탭을 바꾸면 맨 위에서 시작
     function list() {
       return Promise.all([rest("GET", "profiles?select=*&order=created_at.desc"), rest("GET", "worksheets?select=id,client_id,steps_done,updated_at,submitted_at&order=updated_at.desc"),
         rest("GET", "consents?select=client_id,decided_at,signer_name&kind=eq.commission&agreed=is.true&text_version=eq." + AGREE_VERSION + "&order=decided_at.desc")]).then(function (res) {
@@ -549,7 +575,7 @@
         var agreed = {}; res[2].forEach(function (c) { if (!agreed[c.client_id]) agreed[c.client_id] = c; });
         var rows = res[0].map(function (p) {
           var w = byClient[p.id]; var n = w ? Object.keys(w.steps_done || {}).length : 0;
-          var sel = el("select", { "aria-label": "상태", onchange: function (e) { rest("PATCH", "profiles?id=eq." + p.id, { status: e.target.value }).then(null, function (err) { alert(err.message); go(); }); } },
+          var sel = el("select", { "aria-label": "상태", onchange: function (e) { rest("PATCH", "profiles?id=eq." + p.id, { status: e.target.value }).then(null, function (err) { tell(err.message); go(); }); } },
             STATUS.map(function (s) { return el("option", { value: s[0], text: s[1] }); }));
           sel.value = p.status;
           return el("tr", {}, [
@@ -572,7 +598,7 @@
         rest("GET", "consents?select=client_id,signer_name&signer_name=not.is.null&order=decided_at.desc")]).then(function (res) {
         var signed = {}; res[2].forEach(function (c) { if (!signed[c.client_id]) signed[c.client_id] = c.signer_name; });
         var names = {}; res[1].forEach(function (p) { names[p.id] = signed[p.id] || p.display_name || "(이름 없음)"; });
-        function oops(e) { alert(e.message); }
+        function oops(e) { tell(e.message); }
         var kids = [el("h1", { text: "후기" })];
         if (!res[0].length) kids.push(el("p", { class: "muted", text: "아직 들어온 후기가 없습니다." }));
         res[0].forEach(function (r) {
@@ -588,7 +614,7 @@
             el("div", { style: "display:flex;flex-wrap:wrap;gap:16px" }, [
               r.scope === "public" && !r.published_at ? el("button", { class: "link-btn", type: "button", text: "실을 후기로 표시", onclick: function () { rest("PATCH", "reviews?id=eq." + r.id, { published_at: new Date().toISOString(), unpublished_at: null }).then(go, oops); } }) : null,
               r.published_at ? el("button", { class: "link-btn", type: "button", text: "내리기", onclick: function () { rest("PATCH", "reviews?id=eq." + r.id, { published_at: null, unpublished_at: new Date().toISOString() }).then(go, oops); } }) : null,
-              el("button", { class: "link-btn", type: "button", text: "지우기", onclick: function () { if (confirm("이 후기를 지웁니다. 되돌릴 수 없습니다. 지울까요?")) rest("DELETE", "reviews?id=eq." + r.id).then(go, oops); } })
+              el("button", { class: "link-btn", type: "button", text: "지우기", onclick: function () { ask("이 후기를 지웁니다. 되돌릴 수 없습니다. 지울까요?", "지우기").then(function (ok) { if (ok) rest("DELETE", "reviews?id=eq." + r.id).then(go, oops); }); } })
             ])
           ]));
         });
@@ -604,8 +630,7 @@
       }, function (e) { holder.appendChild(el("p", { class: "msg bad", text: e.message })); });
     }
     function remove(p) {
-      if (!confirm((p.display_name || "이 고객") + "의 작성지 · 투자성향 · 동의 기록 · 후기를 모두 지웁니다. 되돌릴 수 없습니다. 지울까요?")) return;
-      rest("DELETE", "profiles?id=eq." + p.id).then(go, function (e) { alert(e.message); });
+      ask((p.display_name || "이 고객") + "의 작성지 · 투자성향 · 동의 기록 · 후기를 모두 지웁니다. 되돌릴 수 없습니다. 지울까요?", "지우기").then(function (ok) { if (ok) rest("DELETE", "profiles?id=eq." + p.id).then(go, function (e) { tell(e.message); }); });
     }
     drawTabs(); go();
     show(tabs, holder);
@@ -646,14 +671,12 @@
       function setStatus(b, st) { return function () { rest("PATCH", "bookings?id=eq." + b.id, { status: st }).then(reload, oops); }; }
       function removeBooking(b) {
         return function () {
-          if (!confirm(b.name + " 님의 신청 정보를 지웁니다. 그 시간은 다시 예약할 수 있게 열립니다. 되돌릴 수 없습니다. 지울까요?")) return;
-          rest("DELETE", "bookings?id=eq." + b.id).then(reload, oops);
+          ask(b.name + " 님의 신청 정보를 지웁니다. 그 시간은 다시 예약할 수 있게 열립니다. 되돌릴 수 없습니다. 지울까요?", "지우기").then(function (ok) { if (ok) rest("DELETE", "bookings?id=eq." + b.id).then(reload, oops); });
         };
       }
       function cancelBooking(b) {
         return function () {
-          if (!confirm(b.name + " 님의 예약을 취소합니다. 그 시간은 다시 예약할 수 있게 열립니다. 취소 사실은 고객에게 직접 알려 주세요. 취소할까요?")) return;
-          rest("PATCH", "bookings?id=eq." + b.id, { status: "cancelled" }).then(reload, oops);
+          ask(b.name + " 님의 예약을 취소합니다. 그 시간은 다시 예약할 수 있게 열립니다. 취소 사실은 고객에게 직접 알려 주세요. 취소할까요?", "예약 취소").then(function (ok) { if (ok) rest("PATCH", "bookings?id=eq." + b.id, { status: "cancelled" }).then(reload, oops); });
         };
       }
       function bookingRow(b) {

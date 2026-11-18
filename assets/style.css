@@ -411,3 +411,13 @@ body.intro-on { overflow: hidden; }
 .intro-end .btn-line { border-color: rgba(255,255,255,.6); color: #fff; background: transparent; }
 @media (prefers-reduced-motion: reduce) { .intro-img { animation: none !important; } }
 @media (max-width: 600px) { .intro-end-t { font-size: 16px; line-height: 27px; } .intro-end { bottom: 44px; padding: 20px 16px; } }
+
+.acct-admin { border: 1px solid var(--hero-accent); border-radius: 999px; padding: 6px 12px; max-width: none; }
+.acct-admin:hover { text-decoration: none; background: var(--hero-raised); }
+
+/* 확인 상자(브라우저 확인 창 대신) */
+.ask-back { position: fixed; inset: 0; z-index: 900; background: rgba(17,17,17,.55); display: grid; place-items: center; padding: 20px; }
+.ask { width: min(100%, 420px); background: var(--surface); color: var(--ink); border-radius: var(--radius-lg); padding: 24px; display: grid; gap: 10px; box-shadow: var(--shadow); text-align: left; }
+.ask p { font-size: 16px; line-height: 26px; }
+.ask-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; flex-wrap: wrap; }
+.ask-row .btn { min-width: 96px; }

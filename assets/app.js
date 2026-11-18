@@ -11,6 +11,32 @@
     return n;
   }
 
+  /* 확인 상자: 브라우저의 확인 창(confirm · alert)은 앱 안 브라우저 등에서 막힐 수 있어서 화면 안에 직접 띄운다.
+     ask(글, 확인 단추 글) → 예 true / 아니오 false.  tell(글) → 알림만. */
+  function ask(message, okText, single) {
+    return new Promise(function (resolve) {
+      var back = document.createElement("div"); back.className = "ask-back";
+      var box = document.createElement("div"); box.className = "ask"; box.setAttribute("role", "alertdialog"); box.setAttribute("aria-modal", "true");
+      String(message).split("\n").forEach(function (line) { var p = document.createElement("p"); p.textContent = line; box.appendChild(p); });
+      var row = document.createElement("div"); row.className = "ask-row";
+      var yes = document.createElement("button"); yes.type = "button"; yes.className = "btn btn-main"; yes.textContent = okText || "예";
+      function done(v) { document.removeEventListener("keydown", onKey); back.remove(); resolve(v); }
+      function onKey(e) { if (e.key === "Escape") done(false); }
+      if (!single) {
+        var no = document.createElement("button"); no.type = "button"; no.className = "btn btn-line-dark"; no.textContent = "아니오";
+        no.addEventListener("click", function () { done(false); });
+        row.appendChild(no);
+      }
+      yes.addEventListener("click", function () { done(true); });
+      row.appendChild(yes); box.appendChild(row); back.appendChild(box);
+      back.addEventListener("click", function (e) { if (e.target === back) done(false); });
+      document.addEventListener("keydown", onKey);
+      document.body.appendChild(back);
+      yes.focus();
+    });
+  }
+  function tell(message) { return ask(message, "확인", true); }
+
   /* ---------- 머리의 로그인 · 닉네임 · 로그아웃 ----------
      로그인 전에는 ‘로그인’ 버튼, 로그인하면 카카오 닉네임과 ‘로그아웃’이 보인다.
      로그인 정보는 로그인 뒤 화면(app/)과 같은 자리(localStorage의 rn_session)에 둔다.
@@ -24,14 +50,28 @@
       return m.name || m.full_name || m.nickname || m.user_name || m.preferred_username || "내 상담";
     } catch (e) { return null; }
   }
+  var acctJustIn = false;   // 방금 카카오 로그인에서 돌아왔는지
   (function () {
     if (location.hash.indexOf("access_token=") === -1 && location.hash.indexOf("error=") === -1) return;
     var p = new URLSearchParams(location.hash.slice(1));
     history.replaceState(null, "", location.pathname + location.search);
     if (p.get("access_token")) {
-      try { localStorage.setItem(ACCT_STORE, JSON.stringify({ access_token: p.get("access_token"), refresh_token: p.get("refresh_token"), expires_at: Number(p.get("expires_at")) })); } catch (e) { /* 저장 못 하면 로그인 전 상태로 보인다 */ }
+      try { localStorage.setItem(ACCT_STORE, JSON.stringify({ access_token: p.get("access_token"), refresh_token: p.get("refresh_token"), expires_at: Number(p.get("expires_at")) })); acctJustIn = true; sessionStorage.removeItem("rn_role"); } catch (e) { /* 저장 못 하면 로그인 전 상태로 보인다 */ }
     }
   })();
+  /* 이 계정이 담당자인지(본인 프로필의 역할만 읽는다 · 한 번 읽으면 창을 닫을 때까지 기억) */
+  function acctRole(sess) {
+    try { var c = sessionStorage.getItem("rn_role"); if (c) return Promise.resolve(c); } catch (e) { /* 기억 못 해도 다시 읽으면 된다 */ }
+    var id;
+    try { id = JSON.parse(decodeURIComponent(escape(atob(sess.access_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))))).sub; } catch (e) { return Promise.resolve(""); }
+    return fetch(CONFIG.supabaseUrl + "/rest/v1/profiles?select=role&id=eq." + id, { headers: { apikey: CONFIG.supabaseKey, Authorization: "Bearer " + sess.access_token } })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (rows) {
+        var role = (rows[0] && rows[0].role) || "";
+        try { if (role) sessionStorage.setItem("rn_role", role); } catch (e) { /* 넘어간다 */ }
+        return role;
+      }, function () { return ""; });
+  }
   function drawAcct() {
     var box = $("acct");
     if (!box || !CONFIG.supabaseUrl) return;
@@ -46,9 +86,15 @@
       return;
     }
     var me = el("a", "acct-name", nick + " 님"); me.href = "app/index.html"; me.title = "내 상담 화면으로 가기";
+    // 담당자 계정이면: 방금 로그인했을 때는 관리자 화면으로 바로 보내고, 평소에는 ‘관리자 화면’ 단추를 보여 준다.
+    acctRole(sess).then(function (role) {
+      if (role !== "advisor") return;
+      if (acctJustIn) { location.replace("app/index.html"); return; }
+      me.textContent = "관리자 화면"; me.title = nick + " 님 · 관리자 화면으로 가기"; me.classList.add("acct-admin");
+    });
     var out = el("button", "acct-out", "로그아웃"); out.type = "button";
     out.addEventListener("click", function () {
-      try { localStorage.removeItem(ACCT_STORE); } catch (e) { /* 그래도 화면은 바꾼다 */ }
+      try { localStorage.removeItem(ACCT_STORE); sessionStorage.removeItem("rn_role"); } catch (e) { /* 그래도 화면은 바꾼다 */ }
       fetch(CONFIG.supabaseUrl + "/auth/v1/logout", { method: "POST", headers: { apikey: CONFIG.supabaseKey, Authorization: "Bearer " + sess.access_token } }).then(null, function () {});
       drawAcct();
     });
@@ -75,11 +121,27 @@
     document.title = "라이즈노르테 · " + TITLES[view];
     document.body.setAttribute("data-view", view);   // 신청 화면에서는 오른쪽 아래 신청 버튼을 숨긴다(style.css)
     var target = id !== view ? document.getElementById(id) : null;      // #why 처럼 화면 안의 자리
-    if (target && !first) target.scrollIntoView(); else window.scrollTo(0, 0);
+    // 다른 화면으로 넘어가면 항상 맨 위에서 시작한다(부드럽게 이동하지 않고 바로).
+    if (target && !first) target.scrollIntoView({ behavior: "auto", block: "start" }); else toTop();
     var cur = document.querySelector('.nav [aria-current="page"]');
     if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: "nearest", inline: "center" });
   }
+  function toTop() {
+    var jump = function () { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); };
+    jump(); requestAnimationFrame(jump); setTimeout(jump, 80);   // 브라우저가 뒤늦게 옮기는 경우까지 덮는다
+  }
   window.addEventListener("hashchange", function () { route(false); });
+  // 메뉴 · 버튼(#이름 링크)을 누르면 브라우저가 스스로 화면을 옮기지 않게 하고 직접 화면을 바꾼다.
+  document.addEventListener("click", function (e) {
+    if (e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
+    if (!a || a.hasAttribute("data-intro-replay")) return;
+    var id = a.getAttribute("href").slice(1) || "home";
+    if (!VIEW_OF[id]) return;
+    e.preventDefault();
+    if (location.hash !== "#" + id) history.pushState(null, "", "#" + id);
+    route(false);
+  });
   route(true);
 
   /* ---------- 30초 자가 점검 ---------- */
@@ -416,9 +478,10 @@
         if (/^HAVE:/.test(err.code || "")) {
           // 같은 이름 · 연락처로 잡힌 예약이 있다 → 바꿀지 묻는다
           var old = new Date(err.code.slice(5));
-          if (confirm("이미 " + fmtDay.format(old) + " " + fmtTime.format(old) + " 예약이 있습니다.\n" + when + "(으)로 바꿀까요?\n바꾸면 앞의 예약은 취소됩니다.")) return send(true);
-          box.textContent = "예약을 바꾸지 않았습니다. 앞의 예약(" + fmtDay.format(old) + " " + fmtTime.format(old) + ")은 그대로입니다."; box.hidden = false;
-          return;
+          return ask("이미 " + fmtDay.format(old) + " " + fmtTime.format(old) + " 예약이 있습니다.\n" + when + "(으)로 바꿀까요?\n바꾸면 앞의 예약은 취소됩니다.", "바꾸기").then(function (ok) {
+            if (ok) return send(true);
+            box.textContent = "예약을 바꾸지 않았습니다. 앞의 예약(" + fmtDay.format(old) + " " + fmtTime.format(old) + ")은 그대로입니다."; box.hidden = false;
+          });
         }
         box.textContent = MESSAGES[err.code] || "보내지 못했습니다. 잠시 뒤 다시 시도해 주세요."; box.hidden = false;
         if (err.code === "TAKEN") { pickedAt = null; loadSlots(); }
@@ -432,13 +495,15 @@
     var msg = $("c-msg"), n = $("c-name").value.trim(), t = $("c-tel").value.replace(/\D/g, "");
     function say(text, ok) { msg.textContent = text; msg.className = ok ? "cal-picked" : "err"; msg.hidden = false; }
     if (!n || !/^01\d{8,9}$/.test(t)) return say("예약할 때 쓴 이름과 휴대폰 번호를 적어 주세요.");
-    if (!confirm("예약을 취소할까요?")) return;
+    ask("예약을 취소할까요?", "예약 취소").then(function (ok) {
+    if (!ok) return;
     sb("rpc/cancel_my_booking", { method: "POST", body: JSON.stringify({ p_name: n, p_phone: t }) }).then(function (res) {
       var d = new Date(res.starts_at);
       say(fmtDay.format(d) + " " + fmtTime.format(d) + " 예약을 취소했습니다.", true);
       $("c-name").value = ""; $("c-tel").value = ""; loadSlots();
     }, function (err) {
       say(err.code === "NOT_FOUND" ? "그 이름과 연락처로 된 예약을 찾지 못했습니다. 예약할 때 적은 그대로 적어 주세요." : "취소하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+    });
     });
   });
 
