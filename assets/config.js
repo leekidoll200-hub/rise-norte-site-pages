@@ -4,9 +4,9 @@ window.RN_CONFIG = {
   // false: 게시 동의를 받은 사례만 보여 준다. 외부에 올리기 전에는 false 로 두거나 동의를 받는다.
   showExamples: false,
 
-  // true: 처음 온 사람에게 홈에서 ‘돈깨비 이야기’(장면 13장 · 55초쯤)를 한 번 보여 준다. 건너뛸 수 있다.
+  // true: 메뉴에 ‘스토리’가 생기고, 누르면 ‘돈깨비 스토리’(장면 13장 · 55초쯤)가 나온다. 자동으로 틀지 않는다.
   // 배포본에서는 기본으로 꺼지고 그림도 나가지 않는다(python scripts/build_deploy.py --intro 로 켠다).
-  showIntro: false,
+  showIntro: true,
 
   // 상담 신청을 보낼 주소. 비어 있으면 미리보기(아무 데도 보내지 않음).
   // 전송 방식을 정한 뒤에 채운다 → README '상담 신청 전송 방식'.

@@ -106,7 +106,7 @@
      주소 뒤의 #이름으로 화면을 고른다(뒤로 가기가 되고, 그 화면의 주소를 그대로 보낼 수 있다).
      자바스크립트가 꺼져 있으면 모든 구역이 한 페이지로 이어져 보인다. */
   var VIEW_OF = { home: "home", quick: "home", check: "check", how: "how", why: "how", cases: "cases", faq: "faq", apply: "apply", privacy: "privacy" };
-  var TITLES = { home: "재무설계 상담", check: "30초 자가 점검", how: "진행 방식", cases: "상담 사례", faq: "자주 묻는 질문", apply: "상담 신청", privacy: "개인정보 처리방침" };
+  var TITLES = { home: "재무설계 상담", check: "1분 자가 점검", how: "진행 방식", cases: "상담 사례", faq: "자주 묻는 질문", apply: "상담 신청", privacy: "개인정보 처리방침" };
   var views = document.querySelectorAll("[data-view]");
   function route(first) {
     var id = (location.hash || "#home").slice(1);
@@ -144,29 +144,72 @@
   });
   route(true);
 
-  /* ---------- 30초 자가 점검 ---------- */
+  /* ---------- 길잡이 돈깨비의 말풍선 ---------- */
+  function guide(text) {
+    var box = el("div", "guide"), face = el("span", "guide-face"), say = el("div", "guide-say");
+    face.setAttribute("aria-hidden", "true");
+    say.appendChild(el("b", null, "돈깨비")); say.appendChild(el("p", null, text));
+    box.appendChild(face); box.appendChild(say);
+    return box;
+  }
+
+  /* ---------- 1분 자가 점검 ----------
+     열두 가지 가운데 해당되는 것을 누르고 ‘결과 보기’를 누르면, 해당 개수에 따라 세 단계로
+     돈독귀신이 유혹하는 말을 하고 돈깨비가 받아친 뒤 상담 신청으로 잇는다.
+     (돈독귀신은 ‘빨리 · 크게 · 나중에’라는 유혹의 목소리다. 수익을 약속하거나 지어낸 숫자로 겁주지 않는다.) */
   var checkForm = $("checkForm");
   var checked = [];
+  var CHECK_TOTAL = checkForm.querySelectorAll("input").length;
+  var DUEL = [
+    null,
+    { bad: "에이, 그 정도는 다들 그래. 다음 달에 챙겨도 안 늦어~",
+      good: "한두 가지일 때가 고치기 가장 쉽습니다. 미루면 가짓수만 늘어납니다. 지금 한 번 점검해 보시죠." },
+    { bad: "복잡하지? 머리 아프게 따지지 말고, 요즘 뜨는 거 하나에 몰아 넣어. 한 방이면 돼!",
+      good: "한 방은 없습니다. 이만큼 해당되면 혼자 정리하기 어려운 단계입니다. 돈마다 자리를 정하면 풀립니다. 같이 순서부터 잡아 보시죠." },
+    { bad: "크크크, 넌 이미 내 손 안이야. 어차피 늦었으니 크게 한 번 걸어 보자고!",
+      good: "늦지 않았습니다. 다만 더 미룰 때도 아닙니다. 이만큼 해당되면 상품이 아니라 구조부터 다시 잡아야 합니다. 오늘 상담 날짜부터 잡으시죠." }
+  ];
+  var duelShown = false, duelTier = -1;
+  function tierOf(n) { return n === 0 ? 0 : n <= 3 ? 1 : n <= 7 ? 2 : 3; }
 
+  function drawDuel(force) {
+    var n = checked.length, t = tierOf(n), box = $("checkResult");
+    if (!duelShown) { box.hidden = true; return; }
+    box.hidden = false;
+    $("sayBad").hidden = t === 0;
+    if (t === 0) {
+      $("goodText").textContent = "해당되는 것이 하나도 없으시군요. 이미 잘하고 계십니다. 그래도 맞게 가고 있는지 확인하고 싶으시면 상담에서 같이 보시죠.";
+    } else {
+      $("badText").textContent = DUEL[t].bad;
+      $("goodText").textContent = "열두 가지 중 " + n + "가지에 해당하시네요. " + DUEL[t].good;
+    }
+    if (force || t !== duelTier) {           // 단계가 바뀔 때만 다시 튀어나온다
+      box.className = "duel t" + t;
+      ["sayBad", "sayGood", "checkApply"].forEach(function (id) {
+        var e = $(id); e.classList.remove("pop"); void e.offsetWidth; e.classList.add("pop");
+      });
+    }
+    duelTier = t;
+  }
   function updateCheck() {
     checked = Array.prototype.filter.call(
       checkForm.querySelectorAll("input"), function (i) { return i.checked; }
     ).map(function (i) { return i.value; });
-
     var n = checked.length;
-    var box = $("checkResult");
-    box.classList.toggle("on", n > 0);
-    $("checkApply").hidden = n === 0;
-    $("checkText").textContent = n === 0
-      ? "해당되는 항목을 누르면 결과가 바로 나옵니다."
-      : "네 가지 중 " + n + "가지 해당 · 점검이 필요합니다. 문제는 상품이 아니라, 전체를 한 번에 보는 설계가 없다는 것입니다.";
+    $("checkCount").textContent = "열두 가지 중 " + n + "가지 해당";
+    drawDuel(false);
 
     var note = $("fromCheck");
     note.hidden = n === 0;
-    note.textContent = n === 0 ? "" : "자가 점검에서 고른 것: " + checked.join(" / ");
+    note.textContent = n === 0 ? "" : "자가 점검에서 고른 것(" + CHECK_TOTAL + "개 중 " + n + "개): " + checked.join(" / ");
   }
   checkForm.addEventListener("change", updateCheck);
   checkForm.addEventListener("submit", function (e) { e.preventDefault(); });
+  $("checkShow").addEventListener("click", function () {
+    duelShown = true;
+    drawDuel(true);
+    $("checkResult").scrollIntoView({ behavior: "smooth", block: "center" });
+  });
 
   /* ---------- 사례 ---------- */
   var FILTERS = [
@@ -262,12 +305,12 @@
     var shown = visible.filter(matches);
     if (!visible.length) {
       $("caseCount").textContent = "";
-      list.appendChild(el("p", "empty", "게시 동의를 받은 사례를 준비하고 있습니다. 상담이 쌓이는 대로 이곳에 올립니다."));
+      list.appendChild(guide("아직 실은 사례가 없습니다. 상담이 쌓이는 대로, 누구인지 알 수 없게 바꿔서 이곳에 올립니다."));
       return;
     }
     $("caseCount").textContent = "사례 " + shown.length + "건";
     if (!shown.length) {
-      list.appendChild(el("p", "empty", "고른 조건에 맞는 사례가 아직 없습니다."));
+      list.appendChild(guide("고른 조건에 맞는 사례가 아직 없습니다. 조건을 하나 풀어 보세요."));
       return;
     }
     shown.forEach(function (c) { list.appendChild(renderCase(c)); });
@@ -460,7 +503,7 @@
     var at = pickedAt;
     var payload = {
       p_start: at.toISOString(), p_name: name, p_phone: digits, p_topics: topics, p_channel: $("f-ch").value || null,
-      p_check: checked.length ? checked.join(" / ") : null,
+      p_check: checked.length ? CHECK_TOTAL + "개 중 " + checked.length + "개: " + checked.join(" / ") : null,
       p_place: $("f-place").value.trim() || null, p_memo: $("f-memo").value.trim() || null, p_consent: CONSENT_VERSION
     };
     var when = fmtDay.format(at) + " " + fmtTime.format(at);

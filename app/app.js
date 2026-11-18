@@ -101,6 +101,12 @@
   }
   function tell(message) { return ask(message, "확인", true); }
 
+  /* 길잡이 돈깨비의 말풍선 */
+  function guide(text) {
+    return el("div", { class: "guide guide-left" }, [el("span", { class: "guide-face", "aria-hidden": "true" }),
+      el("div", { class: "guide-say" }, [el("b", { text: "돈깨비" }), el("p", { text: text })])]);
+  }
+
   /* ---------- 데이터 ---------- */
   function rest(method, path, body, prefer) {
     return token().then(function (t) {
@@ -170,7 +176,7 @@
   function viewSignedOut(msg) {
     show(el("section", { class: "panel" }, [
       el("h1", { text: "상담 고객 화면" }),
-      el("p", { class: "muted", text: "상담 고객 전용 화면입니다. 카카오로 로그인하면 상담 동의와 후기 작성, 사전 작성지를 쓸 수 있고 내 자료만 볼 수 있습니다." }),
+      guide("상담을 받으신 분이 쓰는 화면입니다. 카카오로 로그인하면 상담 동의와 후기 작성, 사전 작성지를 쓸 수 있고 내 자료만 보입니다."),
       msg ? el("p", { class: "msg bad", text: msg }) : null,
       el("button", { class: "btn btn-kakao btn-wide", type: "button", onclick: login, text: "카카오로 로그인" }),
       el("p", { class: "src", text: "로그인할 때 카카오가 닉네임 · 프로필 사진 · 이메일 제공 동의를 묻습니다. 계정을 확인하는 데만 쓰고 다른 곳에 주지 않습니다." })
@@ -202,7 +208,7 @@
   function viewWaiting(profile) {
     show(el("section", { class: "panel" }, [
       el("h1", { text: "로그인됐습니다" }),
-      el("p", { text: "담당 자산관리사가 확인하면 이 화면이 열립니다. 열린 뒤에 화면을 새로 고쳐 주세요." }),
+      guide("담당 자산관리사가 확인하면 이 화면이 열립니다. 열린 뒤에 아래 ‘새로 고침’을 눌러 주세요."),
       el("button", { class: "btn btn-main", type: "button", text: "새로 고침", onclick: function () { location.reload(); } }),
       el("p", { class: "src", text: "지금 상태: " + ({ lead: "신청", lecture: "강의 참석", ended: "관리 종료" }[profile.status] || profile.status) })
     ]));
@@ -465,7 +471,8 @@
           })).then(onDone, function (e) { btn.disabled = false; err.textContent = e.message; err.hidden = false; });
         }
       });
-      return el("section", { class: "panel" }, [el("h1", { text: "재무설계 상담 확인 · 동의서" }), el("p", { class: "muted", text: "라이즈노르테 대표 자산관리사 이승준" })]
+      return el("section", { class: "panel" }, [el("h1", { text: "재무설계 상담 확인 · 동의서" }), el("p", { class: "muted", text: "라이즈노르테 대표 자산관리사 이승준" }),
+        guide("천천히 읽어 보세요. 모르는 말이 있으면 옆에 있는 담당자에게 바로 물어보시면 됩니다.")]
         .concat(agreementText(), [el("label", { class: "agree" }, [c2, el("span", { text: "수당 안내를 들었고 이해했습니다" })])],
           privacyText(), [
             el("label", { class: "agree" }, [c3, el("span", { text: "개인정보 수집 · 이용에 동의합니다" })]),
@@ -505,7 +512,7 @@
       });
       var kids = [
         el("h1", { text: "상담 후기" }),
-        el("p", { class: "muted", text: "편하게 적어 주세요. 짧아도 좋고, 비워 두셔도 됩니다." }),
+        guide("편하게 적어 주세요. 짧아도 좋고, 비워 두셔도 됩니다. 아쉬웠던 점을 적어 주시면 다음 상담을 고치는 데 씁니다."),
         rv ? el("p", { class: "msg", text: stamp(rv.updated_at) + "에 저장한 후기입니다. 고쳐서 다시 저장할 수 있습니다." + (rv.published_at ? " 지금 실려 있는 후기라서, 고치면 내려가고 담당자가 다시 확인한 뒤 실립니다." : "") }) : null
       ];
       REVIEW_Q.slice(0, 2).forEach(function (q) { kids.push(el("div", { class: "wide" }, [el("label", { text: q[1] }), areas[q[0]]])); });
