@@ -565,13 +565,13 @@
     var tabs = el("div", { class: "tabs" });
     function drawTabs() {
       tabs.textContent = "";
-      [["book", "예약 관리"], ["list", "고객 목록"], ["reviews", "후기"], ["mine", "고객 화면 시험 (내 계정)"]].forEach(function (t) {
+      [["book", "예약 관리"], ["stats", "통계"], ["list", "고객 목록"], ["reviews", "후기"], ["mine", "고객 화면 시험 (내 계정)"]].forEach(function (t) {
         tabs.appendChild(el("button", { type: "button", "aria-pressed": String(tab === t[0]), text: t[1], onclick: function () { pickTab(t[0]); } }));
       });
     }
     function go() {
       holder.textContent = ""; holder.appendChild(el("p", { class: "muted", text: "불러오는 중입니다." }));
-      var p = tab === "mine" ? viewClientHome(me, { advisor: true }) : tab === "book" ? viewBookings(go) : tab === "reviews" ? reviews() : list();
+      var p = tab === "mine" ? viewClientHome(me, { advisor: true }) : tab === "book" ? viewBookings(go) : tab === "reviews" ? reviews() : tab === "stats" ? statsView() : list();
       p.then(function (n) { holder.textContent = ""; holder.appendChild(n); }, function (e) { holder.textContent = ""; holder.appendChild(el("p", { class: "msg bad", text: e.message })); });
     }
     function pickTab(t) { tab = t; drawTabs(); window.scrollTo(0, 0); go(); }   // 탭을 바꾸면 맨 위에서 시작
@@ -598,6 +598,110 @@
         return el("section", {}, [el("h1", { text: "고객 목록", style: "margin-bottom:16px" }), el("div", { class: "table-wrap" }, [el("table", { class: "clients" }, [
           el("thead", {}, [el("tr", {}, ["이름", "상태", "상담 동의", "작성지", "마지막 저장", ""].map(function (h) { return el("th", { text: h }); }))]), el("tbody", {}, rows)])]),
           el("p", { class: "src", text: "‘계약 고객’으로 바꾸면 그 고객이 상담 동의 · 후기 작성 · 사전 작성지를 쓸 수 있습니다. 고객이 카카오로 한 번 로그인해야 이 목록에 나타납니다. 화면에 고객 이름이 보이니 다른 사람이 보는 곳에서는 열지 마세요." })]);
+      });
+    }
+    /* ---------- 통계: 방문 · 머문 시간 · 단계별 전환 · 유입 경로 ---------- */
+    var statDays = 7;
+    function statsView() {
+      var VIEW_NAME = { home: "홈", check: "자가 점검", how: "진행 방식", cases: "상담 사례", faq: "자주 묻는 질문", apply: "상담 신청", privacy: "처리방침" };
+      var SRC_NAME = { direct: "직접 들어옴 · 링크", naver: "네이버", google: "구글", kakao: "카카오 · 다음", instagram: "인스타그램", youtube: "유튜브", facebook: "페이스북", threads: "스레드" };
+      var DEV_NAME = { mobile: "휴대폰", tablet: "태블릿", desktop: "PC" };
+      var to = KST_KEY.format(new Date()), from = KST_KEY.format(new Date(Date.now() - (statDays - 1) * 86400000));
+      function dur(ms) { ms = Number(ms) || 0; var s = Math.round(ms / 1000); return s < 60 ? s + "초" : Math.floor(s / 60) + "분 " + (s % 60) + "초"; }
+      function pct(a, b) { return b ? (Math.round(a / b * 1000) / 10) + "%" : "—"; }
+      function won(v) { return v == null || !isFinite(v) ? "—" : Math.round(v).toLocaleString("ko-KR") + "원"; }
+      function table(heads, rows) {
+        return el("div", { class: "table-wrap" }, [el("table", { class: "clients stat-table" }, [
+          el("thead", {}, [el("tr", {}, heads.map(function (h) { return el("th", { text: h }); }))]),
+          el("tbody", {}, rows.length ? rows.map(function (r) { return el("tr", {}, r.map(function (c) { return el("td", {}, [c instanceof Node ? c : String(c)]); })); })
+            : [el("tr", {}, [el("td", { colspan: String(heads.length), text: "아직 기록이 없습니다." })])])])]);
+      }
+      function bar(v, max) { return el("div", { class: "stat-bar" }, [el("i", { style: "width:" + (max ? Math.max(2, Math.round(v / max * 100)) : 0) + "%" }), el("span", { text: String(v) })]); }
+      return Promise.all([
+        rest("POST", "rpc/stats", { p_from: from, p_to: to }),
+        rest("GET", "ad_costs?select=*&day=gte." + from + "&day=lte." + to + "&order=day.desc")
+      ]).then(function (res) {
+        var s = res[0] || {}, costs = res[1] || [], t = s.total || {};
+        var range = el("div", { class: "tabs" }, [[1, "오늘"], [7, "7일"], [30, "30일"], [90, "90일"]].map(function (d) {
+          return el("button", { type: "button", "aria-pressed": String(statDays === d[0]), text: d[1], onclick: function () { statDays = d[0]; go(); } });
+        }));
+        var cards = el("div", { class: "stat-cards" }, [
+          ["방문자", t.visitors || 0, "서로 다른 사람(브라우저)"], ["방문 횟수", t.sessions || 0, "들어온 횟수"],
+          ["화면 조회", t.views || 0, "메뉴를 본 횟수"], ["평균 머문 시간", dur(t.avg_ms), "한 번 들어와서"],
+          ["자가 점검 결과", t.result || 0, "결과 보기를 누른 방문"], ["상담 신청", s.bookings || 0, "실제로 들어온 예약"]
+        ].map(function (c) { return el("div", { class: "stat" }, [el("b", { text: String(c[1]) }), el("span", { text: c[0] }), el("small", { text: c[2] })]); }));
+
+        var steps = [["사이트 방문", t.sessions || 0], ["자가 점검 화면", t.check || 0], ["결과 보기", t.result || 0], ["상담 신청 화면", t.apply || 0], ["시간 고름", t.pick || 0], ["예약 완료", t.book || 0]];
+        var funnel = table(["단계", "방문 수", "앞 단계 대비", "처음 대비"], steps.map(function (st, i) {
+          return [st[0], bar(st[1], steps[0][1]), i ? pct(st[1], steps[i - 1][1]) : "—", i ? pct(st[1], steps[0][1]) : "100%"];
+        }));
+
+        var maxV = Math.max.apply(null, (s.daily || []).map(function (d) { return d.sessions; }).concat([1]));
+        var daily = table(["날짜", "방문 횟수", "방문자", "평균 머문 시간", "점검 결과", "예약"], (s.daily || []).slice().reverse().map(function (d) {
+          return [d.day.slice(5).replace("-", "월 ") + "일", bar(d.sessions, maxV), d.visitors, dur(d.avg_ms), d.result, d.book];
+        }));
+
+        var maxP = Math.max.apply(null, (s.by_view || []).map(function (v) { return v.views; }).concat([1]));
+        var views = table(["화면", "조회 수", "평균 머문 시간"], (s.by_view || []).map(function (v) { return [VIEW_NAME[v.view] || v.view, bar(v.views, maxP), dur(v.avg_ms)]; }));
+
+        var costBy = {}; (s.costs || []).forEach(function (c) { costBy[c.src] = Number(c.amount) || 0; });
+        var srcs = table(["들어온 경로", "방문", "점검 결과", "예약", "예약 전환", "광고비", "방문당 비용", "예약당 비용"], (s.by_src || []).map(function (r) {
+          var c = costBy[r.src];
+          return [SRC_NAME[r.src] || r.src, r.sessions, r.result, r.book, pct(r.book, r.sessions), c == null ? "—" : won(c), c == null ? "—" : won(c / r.sessions), c == null || !r.book ? "—" : won(c / r.book)];
+        }));
+        var devs = table(["기기", "방문", "예약"], (s.by_dev || []).map(function (r) { return [DEV_NAME[r.dev] || r.dev, r.sessions, r.book]; }));
+        var maxH = Math.max.apply(null, (s.by_hour || []).map(function (h) { return h.sessions; }).concat([1]));
+        var hours = table(["시간대", "방문"], (s.by_hour || []).map(function (h) { return [h.hour + "시", bar(h.sessions, maxH)]; }));
+        var maxC = Math.max.apply(null, (s.check_n || []).map(function (c) { return c.c; }).concat([1]));
+        var checks = table(["해당 개수", "사람 수"], (s.check_n || []).map(function (c) { return [c.n + "개", bar(c.c, maxC)]; }));
+
+        /* 광고비 적기: 경로 이름은 위 표의 ‘들어온 경로’에 나온 영문 이름과 같게 */
+        var cDay = el("input", { type: "date", value: to, "aria-label": "날짜" });
+        var cSrc = el("input", { type: "text", maxlength: "30", placeholder: "예) naver · instagram", "aria-label": "경로" });
+        var cAmt = el("input", { type: "number", min: "0", step: "1000", placeholder: "원", "aria-label": "금액" });
+        var cErr = el("p", { class: "msg bad", hidden: true });
+        var costBox = el("details", { class: "panel" }, [
+          el("summary", { text: "광고비 적기 (방문당 · 예약당 비용을 보려면)" }),
+          el("p", { class: "muted", text: "광고를 집행한 날짜 · 경로 · 금액을 적으면 위 표에서 방문당 비용과 예약당 비용이 계산됩니다. 경로는 광고 링크 끝에 붙인 이름과 같게 적습니다(예: 링크가 …/?from=naver 이면 naver)." }),
+          el("div", { class: "wide" }, [el("label", { text: "날짜" }), cDay]),
+          el("div", { class: "wide" }, [el("label", { text: "경로" }), cSrc]),
+          el("div", { class: "wide" }, [el("label", { text: "금액(원)" }), cAmt]),
+          cErr,
+          el("button", {
+            class: "btn btn-main", type: "button", text: "적기", onclick: function () {
+              var sv = cSrc.value.trim().toLowerCase(), av = Number(cAmt.value);
+              if (!cDay.value || !sv || !(av >= 0) || cAmt.value === "") { cErr.textContent = "날짜 · 경로 · 금액을 모두 적어 주세요."; cErr.hidden = false; return; }
+              rest("POST", "ad_costs", { day: cDay.value, src: sv, amount: Math.round(av) }).then(go, function (e) { cErr.textContent = e.message; cErr.hidden = false; });
+            }
+          })
+        ].concat(costs.map(function (c) {
+          return el("div", { class: "wide" }, [el("label", { text: c.day + " · " + c.src + " · " + Number(c.amount).toLocaleString("ko-KR") + "원" }),
+            el("div", {}, [el("button", { class: "link-btn", type: "button", text: "지우기", onclick: function () { rest("DELETE", "ad_costs?id=eq." + c.id).then(go, function (e) { tell(e.message); }); } })])]);
+        })));
+
+        var off = false; try { off = localStorage.getItem("rn_notrack") === "1"; } catch (e) { /* 넘어간다 */ }
+        var mine = el("button", { class: "link-btn", type: "button", text: off ? "이 브라우저의 방문을 다시 세기" : "이 브라우저의 방문은 세지 않기",
+          onclick: function () { try { off ? localStorage.removeItem("rn_notrack") : localStorage.setItem("rn_notrack", "1"); } catch (e) { /* 넘어간다 */ } go(); } });
+
+        function sec(title, note, body) { return el("div", { class: "panel" }, [el("h2", { text: title }), note ? el("p", { class: "muted", text: note }) : null, body]); }
+        return el("section", { style: "display:grid;gap:24px" }, [
+          el("h1", { text: "통계" }), range,
+          el("p", { class: "src", text: from + " ~ " + to + " · 이름 · 연락처 없이 횟수만 셉니다. 담당자로 로그인한 브라우저와 PC 확인용 주소는 세지 않습니다." }),
+          cards,
+          sec("단계별 전환", "방문한 사람이 어디까지 갔는지입니다. 숫자가 크게 줄어드는 단계가 손볼 곳입니다.", funnel),
+          sec("날짜별", null, daily),
+          sec("화면별", "어느 메뉴를 많이 보고 오래 머무는지입니다.", views),
+          sec("들어온 경로별", "링크 끝에 ?from=이름 을 붙여 보내면 경로가 나뉩니다(예: 인스타 프로필 링크는 …/?from=instagram, 강의 QR은 …/?from=lecture).", srcs),
+          sec("돈독귀신 테스트", "테스트를 시작한 방문 " + (s.check_start || 0) + " · 결과까지 본 방문 " + (t.result || 0) + " (" + pct(t.result || 0, s.check_start || 0) + ")", table(["나온 결과", "횟수"], (s.check_who || []).map(function (w) {
+            var NAME = { dalkom: "달콤귀", jiltu: "질투귀", buran: "불안귀", tamyok: "탐욕귀", dondok: "돈독귀신(넷 다)", none: "돈깨비만(해당 없음)" };
+            return [NAME[w.who] || w.who, w.c];
+          }))),
+          sec("테스트에서 고른 개수", null, checks),
+          sec("스토리", null, table(["재생을 시작한 방문", "끝까지 본 방문", "끝까지 본 비율"], [[t.story || 0, t.story_end || 0, pct(t.story_end || 0, t.story || 0)]])),
+          sec("기기별", null, devs),
+          sec("시간대별 방문", null, hours),
+          costBox, mine
+        ]);
       });
     }
     function reviews() {

@@ -132,3 +132,14 @@ details.panel[open] > summary { margin-bottom: var(--space-4); }
 .mover { display: grid; gap: 8px; padding-top: 4px; }
 .mover[hidden] { display: none; }
 .mover input { max-width: 170px; }
+/* 통계 */
+.stat-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 18px; display: grid; gap: 2px; box-shadow: var(--shadow-sm); }
+.stat b { font-size: 28px; line-height: 36px; color: var(--accent); font-weight: 700; }
+.stat span { font-weight: 600; }
+.stat small { font-size: 12.5px; color: var(--ink-muted); }
+.stat-table td, .stat-table th { white-space: nowrap; }
+.stat-bar { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.stat-bar i { display: block; height: 10px; border-radius: 5px; background: var(--hero-accent); }
+.stat-bar span { font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .stat-cards { grid-template-columns: repeat(2, 1fr); } .stat b { font-size: 24px; } }

@@ -80,6 +80,7 @@
     if (!nick) {
       var inBtn = el("button", "acct-btn", "로그인"); inBtn.type = "button";
       inBtn.addEventListener("click", function () {
+        if (window.RN_TRACK) window.RN_TRACK("login_click");
         location.href = CONFIG.supabaseUrl + "/auth/v1/authorize?provider=kakao&redirect_to=" + encodeURIComponent(location.origin + location.pathname);
       });
       box.appendChild(inBtn);
@@ -153,43 +154,125 @@
     return box;
   }
 
-  /* ---------- 1분 자가 점검 ----------
-     열두 가지 가운데 해당되는 것을 누르고 ‘결과 보기’를 누르면, 해당 개수에 따라 세 단계로
-     돈독귀신이 유혹하는 말을 하고 돈깨비가 받아친 뒤 상담 신청으로 잇는다.
-     (돈독귀신은 ‘빨리 · 크게 · 나중에’라는 유혹의 목소리다. 수익을 약속하거나 지어낸 숫자로 겁주지 않는다.) */
+  /* ---------- 1분 자가 점검 = ‘내 안의 돈독귀신 테스트’ ----------
+     설계: docs/캐릭터_사업/테스트_설계.md. 열두 문항은 네 귀신에 세 개씩 붙어 있다(문항의 data-g).
+     어느 귀신의 문항을 많이 눌렀는지로 결과를 낸다. 넷 모두 2개 이상이면 돈독귀신, 하나도 없으면 돈깨비만.
+     귀신은 겁주는 존재가 아니라 누구에게나 있는 것이고, 자리를 정해 주면 얌전해진다는 것이 결론이다.
+     수익 약속 · 지어낸 숫자 · 손실 협박은 넣지 않는다. */
   var checkForm = $("checkForm");
   var checked = [];
   var CHECK_TOTAL = checkForm.querySelectorAll("input").length;
-  var DUEL = [
-    null,
-    { bad: "에이, 그 정도는 다들 그래. 다음 달에 챙겨도 안 늦어~",
-      good: "한두 가지일 때가 고치기 가장 쉽습니다. 미루면 가짓수만 늘어납니다. 지금 한 번 점검해 보시죠." },
-    { bad: "복잡하지? 머리 아프게 따지지 말고, 요즘 뜨는 거 하나에 몰아 넣어. 한 방이면 돼!",
-      good: "한 방은 없습니다. 이만큼 해당되면 혼자 정리하기 어려운 단계입니다. 돈마다 자리를 정하면 풀립니다. 같이 순서부터 잡아 보시죠." },
-    { bad: "크크크, 넌 이미 내 손 안이야. 어차피 늦었으니 크게 한 번 걸어 보자고!",
-      good: "늦지 않았습니다. 다만 더 미룰 때도 아닙니다. 이만큼 해당되면 상품이 아니라 구조부터 다시 잡아야 합니다. 오늘 상담 날짜부터 잡으시죠." }
-  ];
-  var duelShown = false, duelTier = -1;
-  function tierOf(n) { return n === 0 ? 0 : n <= 3 ? 1 : n <= 7 ? 2 : 3; }
+  var GHOSTS = {
+    dalkom: { name: "달콤귀", nick: "오늘을 즐길 줄 아는 사람", color: "#D9488F", img: "assets/ghost_dalkom.webp",
+      say: "오늘 고생했잖아. 이 정도는 괜찮아, 응?",
+      tame: "즐기는 돈을 따로 떼어 ‘한 달에 여기까지’만 정해 보세요. 그 안에서는 마음 편히 쓰셔도 됩니다.",
+      seat: "자리를 찾으면 달콤귀는 기쁨 담당이 됩니다. 정해 둔 만큼은 마음 편히 즐기게 해 줍니다." },
+    jiltu: { name: "질투귀", nick: "지고는 못 사는 사람", color: "#3567D6", img: "assets/ghost_jiltu.webp",
+      say: "쟤는 벌써 저만큼 갔대. 너만 그대로래.",
+      tame: "무엇을 위해 언제까지 모을지 한 줄로 적어 보세요. 견줄 상대가 남에서 내 목표로 바뀝니다.",
+      seat: "자리를 찾으면 질투귀는 기록 담당이 됩니다. 남의 소식 대신 ‘지난달보다 얼마나 왔는지’를 물어 옵니다." },
+    buran: { name: "불안귀", nick: "돌다리도 두들겨 보는 사람", color: "#2A9A5C", img: "assets/ghost_buran.webp",
+      say: "근데… 잘못되면 어쩌지? 조금만 더 알아보고 하자…",
+      tame: "만일을 위한 돈부터 따로 떼어 두세요. 기댈 곳이 생기면 미루던 결정이 쉬워집니다.",
+      seat: "자리를 찾으면 불안귀는 경보 담당이 됩니다. 아무 때나 울지 않고 정말 살펴볼 일이 있을 때만 알려 줍니다." },
+    tamyok: { name: "탐욕귀", nick: "크게 그리는 사람", color: "#CF3434", img: "assets/ghost_tamyok.webp",
+      say: "조금씩 해서 언제 모아? 한 번에 가자!",
+      tame: "불리는 돈에는 ‘언제 쓸 돈인지’와 ‘여기까지만’을 먼저 정해 보세요. 그 안에서는 길게 두셔도 됩니다.",
+      seat: "자리를 찾으면 탐욕귀는 성장 담당이 됩니다. 급한 성미가 오래 버티는 끈기로 바뀝니다." },
+    dondok: { name: "돈독귀신", nick: "넷이 다 모인 사람", color: "#7B3FBF", img: "assets/dondok.webp",
+      say: "어머, 넷이 다 와 있네. 편하게 있어. 지금 그대로.",
+      tame: "넷을 한꺼번에 잡으려 하면 지칩니다. 어디가 새는지부터 보고 하나씩 자리를 정하면 됩니다.",
+      seat: "자리를 찾으면 돈독귀신은 사라지지 않고 흩어집니다. 네 귀신이 각자 자리로 갑니다." }
+  };
+  var G_ORDER = ["dalkom", "jiltu", "buran", "tamyok"];
+  var LEVEL = ["조용함", "속삭이는 중", "제법 시끄러움", "날뛰는 중"];
+  var duelShown = false, lastKey = null, lastClicked = null, checkStarted = false;
 
+  /* 지금 누른 것으로 결과를 정한다 */
+  function ghostResult() {
+    var count = { dalkom: 0, jiltu: 0, buran: 0, tamyok: 0 }, seat = {};
+    Array.prototype.forEach.call(checkForm.querySelectorAll("input:checked"), function (i) {
+      var g = i.getAttribute("data-g"); count[g]++; if (i.getAttribute("data-seat")) seat[g] = true;
+    });
+    var total = G_ORDER.reduce(function (a, g) { return a + count[g]; }, 0);
+    var key;
+    if (total === 0) key = "none";
+    else if (G_ORDER.every(function (g) { return count[g] >= 2; })) key = "dondok";
+    else {
+      var max = Math.max.apply(null, G_ORDER.map(function (g) { return count[g]; }));
+      var top = G_ORDER.filter(function (g) { return count[g] === max; });
+      if (top.length > 1) { var s2 = top.filter(function (g) { return seat[g]; }); if (s2.length) top = s2; }
+      key = top.length > 1 && lastClicked && top.indexOf(lastClicked) !== -1 ? lastClicked : top[0];
+    }
+    return { key: key, count: count, total: total,
+      also: G_ORDER.filter(function (g) { return g !== key && key !== "dondok" && count[g] >= 2; }) };
+  }
+  function bubble(cls, faceCls, faceImg, who, lines) {
+    var row = el("div", "say " + cls), face = el("span", faceCls), b = el("div", "say-b");
+    face.setAttribute("aria-hidden", "true");
+    if (faceImg) face.style.backgroundImage = 'url("' + faceImg + '")';
+    b.appendChild(el("b", null, who));
+    lines.forEach(function (t, i) { b.appendChild(el("p", i ? "say-sub" : null, t)); });
+    row.appendChild(face); row.appendChild(b);
+    return row;
+  }
   function drawDuel(force) {
-    var n = checked.length, t = tierOf(n), box = $("checkResult");
+    var box = $("checkResult");
     if (!duelShown) { box.hidden = true; return; }
+    var r = ghostResult();
     box.hidden = false;
-    $("sayBad").hidden = t === 0;
-    if (t === 0) {
-      $("goodText").textContent = "해당되는 것이 하나도 없으시군요. 이미 잘하고 계십니다. 그래도 맞게 가고 있는지 확인하고 싶으시면 상담에서 같이 보시죠.";
+    box.textContent = "";
+    box.className = "ghost-result" + (force || r.key !== lastKey ? " pop" : "");
+    if (r.key === "none") {
+      box.style.setProperty("--g", "#8A6A1F");
+      box.appendChild(bubble("say-good", "guide-face", null, "돈깨비", ["해당되는 것이 하나도 없으시군요. 귀신들이 다 제자리에 앉아 있습니다. 맞게 가고 있는지 확인하고 싶으시면 상담에서 같이 보시죠."]));
     } else {
-      $("badText").textContent = DUEL[t].bad;
-      $("goodText").textContent = "열두 가지 중 " + n + "가지에 해당하시네요. " + DUEL[t].good;
-    }
-    if (force || t !== duelTier) {           // 단계가 바뀔 때만 다시 튀어나온다
-      box.className = "duel t" + t;
-      ["sayBad", "sayGood", "checkApply"].forEach(function (id) {
-        var e = $(id); e.classList.remove("pop"); void e.offsetWidth; e.classList.add("pop");
+      var g = GHOSTS[r.key];
+      box.style.setProperty("--g", g.color);
+      var head = el("div", "gr-head"), pic = el("span", "gr-pic");
+      pic.setAttribute("aria-hidden", "true"); pic.style.backgroundImage = 'url("' + g.img + '")';
+      var txt = el("div", "gr-txt");
+      txt.appendChild(el("p", "gr-over", "내 안의 돈독귀신, 지금은"));
+      txt.appendChild(el("p", "gr-name", r.key === "dondok" ? "넷이 합쳐진 돈독귀신" : g.name));
+      txt.appendChild(el("p", "gr-nick", "“" + g.nick + "”"));
+      head.appendChild(pic); head.appendChild(txt);
+      box.appendChild(head);
+      box.appendChild(bubble("say-bad", "say-face", g.img, g.name, [g.say]));
+      var bars = el("div", "gr-bars");
+      G_ORDER.forEach(function (k) {
+        var row = el("div", "gr-bar");
+        row.style.setProperty("--c", GHOSTS[k].color);
+        row.appendChild(el("span", "gr-bar-n", GHOSTS[k].name));
+        var dots = el("span", "gr-dots"); dots.setAttribute("aria-hidden", "true");
+        for (var d = 1; d <= 3; d++) dots.appendChild(el("i", d <= r.count[k] ? "on" : null));
+        row.appendChild(dots);
+        row.appendChild(el("span", "gr-bar-l", LEVEL[r.count[k]]));
+        bars.appendChild(row);
       });
+      box.appendChild(bars);
+      if (r.also.length) box.appendChild(el("p", "gr-also", "옆에 " + r.also.map(function (k) { return GHOSTS[k].name; }).join(" · ") + "도 와 있습니다."));
+      box.appendChild(bubble("say-good", "guide-face", null, "돈깨비", [g.tame, g.seat]));
     }
-    duelTier = t;
+    box.appendChild(el("p", "gr-note", "귀신이 있는 것은 흠이 아닙니다. 누구에게나 있고, 자리를 정해 주면 얌전해집니다. 자리를 정하는 일은 혼자 하면 미루기 쉬우니, 순서부터 같이 잡아 보시죠."));
+    var acts = el("div", "gr-acts");
+    var go = el("a", "btn btn-main btn-lg", "이 결과로 상담 신청"); go.href = "#apply";
+    var again = el("button", "link", "다시 하기"); again.type = "button";
+    again.addEventListener("click", function () {
+      Array.prototype.forEach.call(checkForm.querySelectorAll("input"), function (i) { i.checked = false; });
+      duelShown = false; lastKey = null; lastClicked = null; updateCheck();
+      checkForm.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    acts.appendChild(go); acts.appendChild(again);
+    box.appendChild(acts);
+    lastKey = r.key;
+  }
+  /* 상담 신청에 함께 넘길 글(결과와 고른 항목의 짧은 이름) */
+  function checkSummary() {
+    if (!checked.length) return null;
+    var r = ghostResult();
+    var head = "돈독귀신 테스트: " + (r.key === "dondok" ? "돈독귀신" : GHOSTS[r.key].name)
+      + " (" + G_ORDER.map(function (k) { return GHOSTS[k].name.slice(0, 2) + " " + r.count[k]; }).join(" · ") + ")";
+    return head + " / 고른 것: " + checked.join(" / ");
   }
   function updateCheck() {
     checked = Array.prototype.filter.call(
@@ -201,14 +284,20 @@
 
     var note = $("fromCheck");
     note.hidden = n === 0;
-    note.textContent = n === 0 ? "" : "자가 점검에서 고른 것(" + CHECK_TOTAL + "개 중 " + n + "개): " + checked.join(" / ");
+    note.textContent = n === 0 ? "" : checkSummary();
   }
-  checkForm.addEventListener("change", updateCheck);
+  checkForm.addEventListener("change", function (e) {
+    if (e.target && e.target.checked) lastClicked = e.target.getAttribute("data-g");
+    if (!checkStarted) { checkStarted = true; if (window.RN_TRACK) window.RN_TRACK("check_start"); }
+    updateCheck();
+  });
   checkForm.addEventListener("submit", function (e) { e.preventDefault(); });
   $("checkShow").addEventListener("click", function () {
     duelShown = true;
     drawDuel(true);
-    $("checkResult").scrollIntoView({ behavior: "smooth", block: "center" });
+    var r = ghostResult();
+    if (window.RN_TRACK) window.RN_TRACK("check_result", { n: checked.length, view: r.key });
+    $("checkResult").scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   /* ---------- 사례 ---------- */
@@ -461,7 +550,7 @@
         free.filter(function (t) { return kstHour(t) === pickedHour; }).forEach(function (at) {
           var t = el("button", "cal-t cal-m", fmtTime.format(at)); t.type = "button";
           if (pickedAt && pickedAt.getTime() === at.getTime()) t.setAttribute("aria-pressed", "true");
-          t.addEventListener("click", function () { pickedAt = at; drawCal(); $("e-when").hidden = true; });
+          t.addEventListener("click", function () { pickedAt = at; drawCal(); $("e-when").hidden = true; if (window.RN_TRACK) window.RN_TRACK("time_pick"); });
           ml.appendChild(t);
         });
         box.appendChild(ml);
@@ -503,7 +592,7 @@
     var at = pickedAt;
     var payload = {
       p_start: at.toISOString(), p_name: name, p_phone: digits, p_topics: topics, p_channel: $("f-ch").value || null,
-      p_check: checked.length ? CHECK_TOTAL + "개 중 " + checked.length + "개: " + checked.join(" / ") : null,
+      p_check: checkSummary(),
       p_place: $("f-place").value.trim() || null, p_memo: $("f-memo").value.trim() || null, p_consent: CONSENT_VERSION
     };
     var when = fmtDay.format(at) + " " + fmtTime.format(at);
@@ -516,6 +605,7 @@
           + when + "에 잡아 두었습니다. 장소는 남겨 주신 번호로 연락드려 함께 정합니다.";
         form.hidden = true; done.hidden = false; done.focus();
         form.reset(); pickedAt = null; pickedHour = null; pickedDay = null;
+        if (window.RN_TRACK) window.RN_TRACK("book");
       }, function (err) {
         var box = $("e-send");
         if (/^HAVE:/.test(err.code || "")) {

@@ -22,9 +22,9 @@
     "오늘 여러분과 함께 ‘구조’를 찾아드리러 왔습니다.",
     "돈독귀신의 유혹에서 여러분을 지켜드리겠습니다."] });
   FRAMES.push({ compose: true, ms: 9000, title: "방금 보신 건, 남의 이야기가 아닙니다", lines: [
-    "돈독귀신은 늘 같은 말을 합니다. 빨리, 크게, 남들은 다 한다.",
-    "도윤 씨가 돈을 못 모은 건 의지가 약해서가 아닙니다.",
-    "돈이 갈 자리가 정해져 있지 않았을 뿐입니다."] });
+    "달콤귀는 지금 쓰라 하고, 질투귀는 남과 견주게 합니다.",
+    "불안귀는 걱정만 하다 미루게 하고, 탐욕귀는 크게 걸게 합니다.",
+    "넷이 합쳐진 것이 돈독귀신입니다. 의지가 아니라 구조로 막아야 합니다."] });
   FRAMES.push({ compose: true, ms: 10000, title: "그래서 이렇게 합니다", steps: true, lines: [
     "지금 내 돈이 어디에 있는지부터 봅니다.",
     "돈마다 자리를 정합니다. 쓸 돈, 지킬 돈, 불릴 돈.",
@@ -92,6 +92,7 @@
     bar.style.width = ((n + 1) / N * 100) + "%";
     count.textContent = (n + 1) + " / " + N;
     end.hidden = !f.last || LECTURE;
+    if (f.last && window.RN_TRACK) window.RN_TRACK("story_end");
     hint.hidden = !!f.last;
     if (!LECTURE && !f.last) timer = setTimeout(next, f.ms);
   }
@@ -116,12 +117,14 @@
     root.hidden = false;
     root.classList.remove("out");
     document.body.classList.add("intro-on");
+    if (window.RN_TRACK) window.RN_TRACK("story_start");
     show(0);
     var skip = root.querySelector(".intro-skip");
     if (skip && !LECTURE) skip.focus();
   }
   function close(hash) {
     clearTimeout(timer);
+    if (window.RN_TRACK) window.RN_TRACK("story_close", { n: idx + 1 });
     markSeen();
     root.classList.add("out");
     document.body.classList.remove("intro-on");

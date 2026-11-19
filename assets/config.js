@@ -5,7 +5,7 @@ window.RN_CONFIG = {
   showExamples: false,
 
   // true: 메뉴에 ‘스토리’가 생기고, 누르면 ‘돈깨비 스토리’(장면 13장 · 55초쯤)가 나온다. 자동으로 틀지 않는다.
-  // 배포본에서는 기본으로 꺼지고 그림도 나가지 않는다(python scripts/build_deploy.py --intro 로 켠다).
+  // 배포본에도 기본으로 나간다(빼려면 python scripts/build_deploy.py --no-intro).
   showIntro: true,
 
   // 상담 신청을 보낼 주소. 비어 있으면 미리보기(아무 데도 보내지 않음).
