@@ -569,3 +569,7 @@ body[data-story="lecture"] .intro-skip:hover { opacity: 1; }
   .gr-acts .btn { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .ghost-result.pop > * { animation: none; } }
+.gr-acts .btn-line { background: var(--surface); color: var(--ink); border: 1.5px solid var(--ink); }
+.gr-acts .link { justify-self: center; }
+.gr-shared { font-size: 14px; line-height: 22px; color: var(--ink-muted); text-align: center; word-break: break-all; }
+.check-from { margin: 0 auto 20px; max-width: 620px; padding: 12px 16px; border-radius: var(--radius-md); background: var(--surface); border: 1px dashed var(--accent); font-size: 15px; text-align: center; }

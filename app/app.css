@@ -143,3 +143,39 @@ details.panel[open] > summary { margin-bottom: var(--space-4); }
 .stat-bar i { display: block; height: 10px; border-radius: 5px; background: var(--hero-accent); }
 .stat-bar span { font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) { .stat-cards { grid-template-columns: repeat(2, 1fr); } .stat b { font-size: 24px; } }
+
+/* 월급날 도장판 */
+.tabs-wrap { flex-wrap: wrap; }
+.pay-says { display: grid; gap: 10px; }
+.pay-say { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
+.pay-say b { font-size: 13px; color: var(--ink-muted); }
+.pay-say p { font-size: 15.5px; line-height: 24px; }
+.pay-star { border-color: var(--ink); }
+.pay-star p { font-size: 17px; line-height: 27px; font-weight: 700; }
+.pay-face { flex: none; display: inline-block; width: 44px; height: 44px; border-radius: 50%; background: #111 center / cover no-repeat; }
+.pay-seat { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
+.pay-seat h2 { display: flex; align-items: center; gap: 10px; font-size: 18px; line-height: 26px; }
+.pay-seat h2 .pay-face { width: 36px; height: 36px; }
+.pay-promise { font-size: 14.5px; color: var(--ink-muted); }
+.pay-pick { margin-bottom: 0; }
+.pay-pick button { flex: 1; min-height: 46px; }
+.pay-reply { font-size: 15px; line-height: 24px; padding: 10px 12px; border-left: 4px solid var(--accent); background: var(--surface-raised); }
+.pay-board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 12px; }
+.pay-cell { display: grid; justify-items: center; align-content: start; gap: 2px; min-height: 84px; padding: 6px 2px; border: 1px dashed var(--line); border-radius: var(--radius-md); font-size: 12px; color: var(--ink-muted); }
+.pay-cell.on { border-style: solid; border-color: #B3261E; }
+.pay-seal { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 3px double #B3261E; color: #B3261E; font-weight: 800; font-size: 13px; transform: rotate(-12deg); }
+.pay-seal-lg { width: 72px; height: 72px; font-size: 22px; border-width: 5px; }
+.pay-done { display: flex; align-items: center; gap: 16px; padding: 16px; border: 2px solid #B3261E; border-radius: var(--radius-md); font-weight: 700; }
+.pay-share { display: grid; gap: 12px; }
+@media (max-width: 600px) { .pay-board { grid-template-columns: repeat(4, 1fr); } }
+
+/* 홈 화면에 깔기 안내 */
+.install-box { margin-bottom: var(--space-6); }
+.install-steps { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; font-size: 15px; line-height: 24px; }
+.pay-opts { margin-bottom: 0; }
+.pay-opts button { min-height: 44px; }
+.q select { max-width: 12em; }
+.pay-monthly { display: grid; gap: 14px; }
+.pay-item { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
+.pay-item-t { font-weight: 700; font-size: 15.5px; line-height: 24px; }
+.pay-item .guide { margin-top: 0; }

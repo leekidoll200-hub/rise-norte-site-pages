@@ -416,7 +416,7 @@
   }
 
   /* ---------- 화면: 상담 확인 · 동의 (계약 고객 · 문구 기준은 도구함 양식 14) ---------- */
-  var AGREE_VERSION = "contract-2026-11-19";
+  var AGREE_VERSION = "contract-2026-11-20";   // 2026-11-20: 월급날 관리 항목(월급날 날짜 · 다달이 확인한 결과 · 소개 주소의 코드)을 넣음
   function agreementText() {
     return [
       el("h2", { text: "1 상담 범위" }),
@@ -433,7 +433,7 @@
       el("dl", { class: "kv" }, [
         el("dt", { text: "처리하는 곳" }), el("dd", { text: "라이즈 노르테 · 대표 이승준" }),
         el("dt", { text: "목적" }), el("dd", { text: "재무설계 상담, 이후 자산관리(정기 점검 · 자산관리에 필요한 금융상품과 서비스 제안), 서비스 개선과 통계" }),
-        el("dt", { text: "항목" }), el("dd", { text: "이름 · 연락처 · 주소 · 이메일 · 생년월일 · 직업 · 가족 상황 · 소득 · 지출 · 자산 · 부채 · 보험 가입 내역 · 투자성향 · 보내 주신 자료(급여명세서 · 원천징수영수증 · 종합소득세 신고서 · 연말정산 서류 · 국민연금 예상액 등)" }),
+        el("dt", { text: "항목" }), el("dd", { text: "이름 · 연락처 · 주소 · 이메일 · 생년월일 · 직업 · 가족 상황 · 소득 · 지출 · 자산 · 부채 · 보험 가입 내역 · 투자성향 · 보내 주신 자료(급여명세서 · 원천징수영수증 · 종합소득세 신고서 · 연말정산 서류 · 국민연금 예상액 등) · 이 화면에서 고르신 내 상황(일하는 형태 · 건강보험 가입 형태 · 부가가치세 유형 · 사는 집 · 차 · 함께 챙기는 가족)과 월급날 관리 기록(월급날 날짜 · 다달이 확인한 네 자리 결과와 남기신 말 · 알림을 켜고 끈 때 · ‘친구에게 보내기’ 주소의 코드)" }),
         el("dt", { text: "보관 기간" }), el("dd", { text: "자산관리를 그만두겠다고 하실 때까지 보관하고, 그때 바로 지웁니다" }),
         el("dt", { text: "거부할 권리" }), el("dd", { text: "동의하지 않으실 수 있습니다. 다만 이 경우 재무설계 상담과 정기 점검은 진행하기 어렵습니다" })
       ]),
@@ -533,12 +533,252 @@
     });
   }
 
+
+
+  /* ---------- 홈 화면에 깔기(설치형 웹앱) ----------
+     설계: docs/캐릭터_사업/관리_기능_설계.md 1번. 깔면 주소창 없이 앱처럼 열린다. 알림 보내기는 아직 만들지 않았다.
+     아이폰은 사파리에서만, 안드로이드는 크롬 등에서 된다. 카카오톡 안에서 연 화면에서는 깔 수 없다. */
+  var installEvt = null;
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); installEvt = e; });
+  function isInstalled() {
+    try { return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; } catch (e) { return false; }
+  }
+  function installGuide(full) {
+    if (isInstalled()) return full ? el("p", { class: "msg", text: "홈 화면에 깔려 있습니다. 지금 앱으로 열어 보고 계십니다." }) : null;
+    var ua = navigator.userAgent || "", ios = /iPhone|iPad|iPod/.test(ua), inApp = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\//i.test(ua);
+    var steps = inApp ? ["지금은 다른 앱 안에서 열린 화면이라 깔 수 없습니다.", ios ? "오른쪽 아래 ‘…’ 또는 공유 단추에서 ‘Safari로 열기’를 누른 뒤 다시 해 보세요." : "오른쪽 위 ‘⋮’에서 ‘다른 브라우저로 열기’를 누른 뒤 다시 해 보세요."]
+      : ios ? ["사파리 아래쪽 가운데의 공유 단추(네모에서 화살표가 올라가는 그림)를 누릅니다.", "아래로 내려 ‘홈 화면에 추가’를 누릅니다.", "오른쪽 위 ‘추가’를 누르면 홈 화면에 돈깨비가 생깁니다."]
+      : ["오른쪽 위 ‘⋮’를 누릅니다.", "‘홈 화면에 추가’ 또는 ‘앱 설치’를 누릅니다.", "‘설치’를 누르면 홈 화면에 돈깨비가 생깁니다."];
+    var kids = [guide("나를 홈 화면에 꺼내 두자구! 그러면 월급날에 바로 만날 수 있어."),
+      el("ol", { class: "install-steps" }, steps.map(function (t) { return el("li", { text: t }); }))];
+    if (installEvt && !inApp) kids.push(el("button", { class: "btn btn-main btn-wide", type: "button", text: "홈 화면에 깔기", onclick: function () {
+      var e = installEvt; installEvt = null; e.prompt();
+    } }));
+    if (!full) kids.push(el("button", { class: "link-btn", type: "button", text: "나중에 하기", onclick: function () {
+      try { sessionStorage.setItem("rn_install_later", "1"); } catch (e) { /* 넘어간다 */ }
+      box.hidden = true;
+    } }));
+    var box = el("div", { class: "panel install-box" }, [el("h2", { text: "홈 화면에 돈깨비 꺼내 두기" })].concat(kids));
+    return box;
+  }
+
+  /* ---------- 화면: 월급날 도장판 · 설정 (계약 고객) ----------
+     설계: docs/캐릭터_사업/월급날_돈깨비.md. 대사는 app/payday.js.
+     알림은 따로 동의서를 받지 않고 ‘설정’에서 켜고 끈다(사용자 2026-11-20). 받는 정보는 상담 확인 · 동의서 3번에 적혀 있다.
+     고객에게 자동으로 보내는 것은 없다. 월급날 아침에 담당자에게만 알림이 가고, 담당자가 카카오톡으로 직접 보낸다. */
+  var PAY = window.RN_PAYDAY || null, payAgain = false;
+  var GHOST_IMG = { dalkom: "../assets/ghost_dalkom.webp", jiltu: "../assets/ghost_jiltu.webp", buran: "../assets/ghost_buran.webp", tamyok: "../assets/ghost_tamyok.webp", dondok: "../assets/dondok.webp" };
+  function seoulToday() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }   // 2026-11-20
+  function loadCare(me) {
+    return rest("GET", "care?client_id=eq." + me.id).then(function (rows) {
+      return rows[0] || rest("POST", "rpc/set_my_care", { p_payday: null, p_notify: false });
+    });
+  }
+  function copyText(text, done) {
+    function manual() { tell("복사하지 못했습니다. 아래 글을 길게 눌러 복사해 주세요.\n\n" + text); }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, manual); else manual();
+  }
+  function ghostSay(key, name, text, big) {
+    return el("div", { class: "pay-say" + (big ? " pay-star" : "") }, [
+      el("span", { class: "pay-face", "aria-hidden": "true", style: 'background-image:url("' + GHOST_IMG[key] + '")' }),
+      el("div", {}, [el("b", { text: name }), el("p", { text: "“" + text + "”" })])]);
+  }
+  function stampBoard(stamps, year) {
+    var have = {}; stamps.forEach(function (s) { have[Number(s.month.slice(5, 7))] = s; });
+    var cells = [];
+    for (var m = 1; m <= 12; m++) {
+      var s = have[m], n = s ? ["dalkom", "jiltu", "buran", "tamyok"].filter(function (k) { return s.kept[k]; }).length : 0;
+      cells.push(el("div", { class: "pay-cell" + (s ? " on" : ""), "aria-label": m + "월 " + (s ? "도장 받음 · 지킨 자리 " + n + "곳" : "아직") }, [
+        el("small", { text: m + "월" }), s ? el("span", { class: "pay-seal", text: "RN" }) : null, s ? el("small", { text: "★".repeat(n) || "·" }) : null]));
+    }
+    return el("div", {}, [el("h2", { text: year + "년 도장판 · " + stamps.length + " / 12" }), el("div", { class: "pay-board" }, cells)]);
+  }
+
+  /* 이달에 챙길 것: 가입 질문지 답에 맞는 줄만, 많아야 셋(마감이 있는 것부터). 자료는 app/monthly.js */
+  function monthlyFor(mon, st) {
+    var M = window.RN_MONTHLY; if (!M) return [];
+    st = st || {};
+    var pay = st.work === "employee" || st.work === "both", biz = st.work === "biz" || st.work === "freelance" || st.work === "both";
+    var ok = { all: true, pay: pay, side: st.work === "both", biz: biz, free: st.work === "freelance",
+      vat: biz && (st.vat === "general" || st.vat === "unknown"), local: st.health === "local",
+      own: st.home === "own", rent: st.home === "rent", car: st.car === "yes" };
+    return (M.months[mon] || []).filter(function (r) { return ok[r.who]; })
+      .sort(function (a, b) { return (b.due - a.due) || ((a.who === "all") - (b.who === "all")); }).slice(0, 3);
+  }
+  function monthlyBox(mon, st) {
+    var rows = monthlyFor(mon, st);
+    if (!rows.length) return null;
+    var GN = { dalkom: "달콤귀", jiltu: "질투귀", buran: "불안귀", tamyok: "탐욕귀" };
+    return el("div", { class: "pay-monthly" }, [el("h2", { text: "이달에 챙길 것" })].concat(rows.map(function (r) {
+      return el("div", { class: "pay-item" }, [
+        el("p", { class: "pay-item-t", text: r.title }),
+        r.g ? ghostSay(r.g, GN[r.g], r.say, false) : null,
+        guide(r.don + (r.who === "vat" && st && st.vat === "unknown" ? " 일반과세에 해당되는지부터 확인해 보자." : ""))]);
+    }), [el("p", { class: "src", text: window.RN_MONTHLY.foot })]));
+  }
+  function viewPayday(me, reload) {
+    if (!PAY) return Promise.reject(new Error("대사 파일을 불러오지 못했습니다 (app/payday.js)."));
+    var today = seoulToday(), year = today.slice(0, 4), mon = Number(today.slice(5, 7)), L = PAY.months[mon];
+    return Promise.all([loadCare(me), rest("GET", "stamps?client_id=eq." + me.id + "&order=month.desc&limit=14")]).then(function (res) {
+      var care = res[0] || {}, all = res[1] || [];
+      var thisYear = all.filter(function (s) { return s.month.slice(0, 4) === year; });
+      var mine = all.filter(function (s) { return s.month === year + "-" + today.slice(5, 7) + "-01"; })[0] || null;
+      var prev = all.filter(function (s) { return s.month < year + "-" + today.slice(5, 7) + "-01"; })[0] || null;   // 바로 앞에 찍은 달
+      var promise = care.promise || {};
+      var kids = [el("h1", { text: mon + "월 월급날 도장판" })];
+
+      var order = ["d", "j", "b", "t"].sort(function (a, b) { return (b === L.star) - (a === L.star); });
+      var KEY_OF = { d: "dalkom", j: "jiltu", b: "buran", t: "tamyok" }, NAME_OF = { d: "달콤귀", j: "질투귀", b: "불안귀", t: "탐욕귀" };
+      var says = el("div", { class: "pay-says" }, order.map(function (k) { return ghostSay(KEY_OF[k], NAME_OF[k], L[k], k === L.star); }));
+      if (L.boss) says.appendChild(ghostSay("dondok", "돈독귀신", L.boss, true));
+      kids.push(says, guide(L.don), el("p", { class: "msg", text: "이달에 할 일: " + L.todo }));
+
+      function shareBox() {
+        var url = new URL("../index.html", location.href); url.search = "?r=" + care.ref_code; url.hash = "#check";
+        return el("div", { class: "pay-share" }, [
+          guide(PAY.friend),
+          el("button", { class: "btn btn-main btn-wide", type: "button", text: "돈깨비를 친구에게 보내기", onclick: function () {
+            var text = "내 안의 돈독귀신 테스트래. 너는 어떤 귀신이 나와? " + url.href;
+            if (navigator.share) navigator.share({ title: "내 안의 돈독귀신 테스트", text: "내 안의 돈독귀신 테스트래. 너는 어떤 귀신이 나와?", url: url.href }).then(null, function () {});
+            else copyText(text, function () { tell("주소를 복사했습니다. 카카오톡이나 문자에 붙여 넣어 보내세요."); });
+          } }),
+          el("p", { class: "src", text: "주소에는 이름이나 연락처가 들어가지 않습니다." })]);
+      }
+
+      if (mine && payAgain) { mine = null; }
+      payAgain = false;
+      if (mine) {
+        var n = PAY.seats.filter(function (s) { return mine.kept[s.key]; }).length;
+        kids.push(el("div", { class: "pay-done" }, [el("span", { class: "pay-seal pay-seal-lg", text: "RN" }), el("p", { text: "이번 달 도장을 받았습니다 · 지킨 자리 " + n + "곳" })]),
+          guide(PAY.stamp(n)), monthlyBox(mon, care.situation), stampBoard(thisYear, year), shareBox(),
+          el("button", { class: "link-btn", type: "button", text: "이번 달 확인을 다시 하기", onclick: function () { mine = null; reload(null, true); } }));
+        return el("section", { class: "panel" }, kids);
+      }
+
+      var kept = {}, err = el("p", { class: "msg bad", hidden: true });
+      PAY.seats.forEach(function (s) {
+        var reply = el("p", { class: "pay-reply", hidden: true });
+        var yes = el("button", { type: "button", "aria-pressed": "false", text: s.yes }), no = el("button", { type: "button", "aria-pressed": "false", text: s.no });
+        function pick(v) {
+          kept[s.key] = v; yes.setAttribute("aria-pressed", String(v)); no.setAttribute("aria-pressed", String(!v));
+          var twice = !v && prev && prev.kept && prev.kept[s.key] === false;
+          reply.textContent = v ? s.ghost + ": “" + s.kept + "”" : "돈깨비: “" + (twice ? PAY.twice : s.miss) + "”";
+          reply.hidden = false; err.hidden = true;
+        }
+        yes.addEventListener("click", function () { pick(true); }); no.addEventListener("click", function () { pick(false); });
+        kids.push(el("div", { class: "pay-seat" }, [
+          el("h2", {}, [el("span", { class: "pay-face", "aria-hidden": "true", style: 'background-image:url("' + GHOST_IMG[s.key] + '")' }), s.seat + " · " + s.ghost]),
+          promise[s.key] ? el("p", { class: "pay-promise", text: "약속: " + promise[s.key] }) : null,
+          el("p", { text: s.ask }),
+          el("div", { class: "tabs pay-pick" }, [yes, no]), reply]));
+      });
+      var note = el("textarea", { maxlength: "300", rows: "2", "aria-label": "담당자에게 물어볼 것" });
+      kids.push(el("div", { class: "wide" }, [el("label", { text: "담당자에게 물어볼 것이 있나요? (선택)" }), note]), err);
+      var btn = el("button", { class: "btn btn-main btn-wide", type: "button", text: "도장 받기", onclick: function () {
+        if (PAY.seats.some(function (s) { return kept[s.key] === undefined; })) { err.textContent = "네 자리를 모두 골라 주세요. 못 지킨 달도 도장은 받습니다."; err.hidden = false; return; }
+        btn.disabled = true;
+        rest("POST", "rpc/stamp_month", { p_kept: kept, p_note: note.value.trim() || null }).then(function () { reload(); },
+          function (e) { btn.disabled = false; err.textContent = e.message; err.hidden = false; });
+      } });
+      kids.push(btn, el("p", { class: "src", text: "못 지킨 달도 도장은 받습니다." }), stampBoard(thisYear, year));
+      return el("section", { class: "panel" }, kids);
+    });
+  }
+  function viewCareSettings(me, reload) {
+    return loadCare(me).then(function (care) {
+      care = care || {};
+      var day = el("select", { "aria-label": "월급날" }, [el("option", { value: "", text: "고르기" })].concat(
+        Array.from({ length: 31 }, function (_, i) { return el("option", { value: String(i + 1), text: i === 30 ? "말일(31일)" : (i + 1) + "일" }); })));
+      day.value = care.payday ? String(care.payday) : "";
+      var on = el("input", { type: "checkbox", checked: !!care.notify });
+      var err = el("p", { class: "msg bad", hidden: true });
+      var btn = el("button", { class: "btn btn-main btn-wide", type: "button", text: "설정 저장", onclick: function () {
+        if (on.checked && !day.value) { err.textContent = "알림을 받으려면 월급날을 골라 주세요."; err.hidden = false; return; }
+        btn.disabled = true;
+        rest("POST", "rpc/set_my_care", { p_payday: day.value ? Number(day.value) : null, p_notify: on.checked })
+          .then(function () { reload("설정을 저장했습니다."); }, function (e) { btn.disabled = false; err.textContent = e.message; err.hidden = false; });
+      } });
+      return el("section", { class: "panel" }, [
+        el("h1", { text: "설정" }),
+        el("div", { class: "wide" }, [el("label", { text: "월급날" }), day]),
+        el("label", { class: "agree" }, [on, el("span", { text: "월급날에 카카오톡으로 도장판 안내 받기" })]),
+        el("p", { class: "src", text: "켜 두면 다달이 월급날에 담당 자산관리사가 카카오톡으로 안내를 보내 드립니다. 안내만 보내고 광고는 보내지 않습니다. 언제든 여기서 끌 수 있습니다."
+          + (care.notify_at ? " 마지막으로 바꾼 때: " + stamp(care.notify_at) : "") }),
+        err, btn,
+        el("button", { class: "link-btn", type: "button", text: "내 상황(일하는 형태 · 건강보험 · 집 · 차 · 가족) 고치기", onclick: function () { reload(null, true); } }),
+        installGuide(true)]);
+    });
+  }
+
+
+  /* ---------- 가입 질문지: 내 상황 등록 (계약 고객) ----------
+     설계: docs/캐릭터_사업/관리_기능_설계.md 2번. 다 채워야 월급날 도장판 · 설정이 열린다. ‘설정’에서 다시 고칠 수 있다.
+     고르기만 하고 적는 칸이 없다. 소득 금액 · 주민등록번호 · 계좌번호 · 건강 정보는 묻지 않는다.
+     ‘돈이 들어오는 날’은 설정의 월급날과 같은 칸이다. 광고가 섞이는 ‘소식 알림’은 넣지 않았다. */
+  var SITU_Q = [
+    { key: "work", ask: "어떻게 일하세요?", opts: [["employee", "직장인(월급)"], ["biz", "개인사업자"], ["freelance", "프리랜서(3.3% 떼고 받음)"], ["both", "직장 + 부수입"], ["none", "지금은 소득 없음"]] },
+    { key: "health", ask: "건강보험은 어떻게 들어 있나요?", opts: [["job", "직장가입자"], ["local", "지역가입자"], ["dependent", "가족 밑으로(피부양자)"], ["unknown", "모름"]] },
+    { key: "vat", ask: "부가가치세는 어떤 유형인가요?", only: function (a) { return a.work === "biz" || a.work === "freelance" || a.work === "both"; },
+      opts: [["general", "일반과세"], ["simple", "간이과세"], ["exempt", "면세"], ["na", "사업자 등록 없음"], ["unknown", "모름"]] },
+    { key: "home", ask: "사는 집은 어떤가요?", opts: [["own", "내 집"], ["jeonse", "전세"], ["rent", "월세"], ["family", "가족과 함께"]] },
+    { key: "car", ask: "차가 있나요?", opts: [["yes", "있다"], ["no", "없다"]] }
+  ];
+  var FAMILY = [["spouse", "배우자"], ["child", "자녀"], ["parent", "부모님"]];
+  function viewSituation(me, care, onDone) {
+    var a = Object.assign({}, care.situation || {}), fam = {};
+    (a.family || []).forEach(function (f) { fam[f] = true; });
+    var err = el("p", { class: "msg bad", hidden: true }), blocks = {};
+    function draw(q) {
+      var row = el("div", { class: "tabs tabs-wrap pay-opts" }, q.opts.map(function (o) {
+        var b = el("button", { type: "button", "aria-pressed": String(a[q.key] === o[0]), text: o[1], onclick: function () {
+          a[q.key] = o[0]; err.hidden = true;
+          Array.prototype.forEach.call(row.children, function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+          refresh();
+        } });
+        return b;
+      }));
+      return (blocks[q.key] = el("div", { class: "q" }, [el("p", { text: q.ask }), row]));
+    }
+    function refresh() { SITU_Q.forEach(function (q) { if (q.only) blocks[q.key].hidden = !q.only(a); }); }
+    var day = el("select", { "aria-label": "돈이 들어오는 날" }, [el("option", { value: "", text: "고르기" })].concat(
+      Array.from({ length: 31 }, function (_, i) { return el("option", { value: String(i + 1), text: i === 30 ? "말일(31일)" : (i + 1) + "일" }); })));
+    day.value = care.payday ? String(care.payday) : "";
+    var irregular = el("input", { type: "checkbox", checked: !!a.irregular });
+    var kids = [el("h1", { text: "내 상황 알려 주기" }),
+      guide("어떻게 지내는지 알려 줘. 너한테 맞는 것만 골라서 같이 챙기자구! 1분이면 돼."),
+      el("p", { class: "src", text: "모르는 것은 ‘모름’을 고르세요. 나중에 ‘설정’에서 고칠 수 있습니다." })];
+    SITU_Q.forEach(function (q, i) {
+      kids.push(draw(q));
+      if (i === 1) kids.push(el("div", { class: "q" }, [el("p", { text: "돈이 들어오는 날은 언제인가요?" }), day,
+        el("label", { class: "agree" }, [irregular, el("span", { text: "들어오는 날이 일정하지 않아요 (위에는 ‘돈 정리하는 날’로 삼을 날을 골라 주세요)" })])]));
+    });
+    kids.push(el("div", { class: "q" }, [el("p", { text: "함께 챙기는 가족이 있나요? (여러 개 골라도 되고, 없으면 그대로 두세요)" }),
+      el("div", { class: "opts" }, FAMILY.map(function (f) {
+        return el("label", {}, [el("input", { type: "checkbox", checked: !!fam[f[0]], onchange: function (e) { fam[f[0]] = e.target.checked; } }), el("span", { text: f[1] })]);
+      }))]));
+    var btn = el("button", { class: "btn btn-main btn-wide", type: "button", text: "저장하고 시작하기", onclick: function () {
+      if (SITU_Q[2].only(a) === false) a.vat = "na";
+      var miss = SITU_Q.filter(function (q) { return !a[q.key]; })[0];
+      if (miss) { err.textContent = "‘" + miss.ask + "’를 골라 주세요."; err.hidden = false; blocks[miss.key].scrollIntoView({ block: "center" }); return; }
+      if (!day.value) { err.textContent = "돈이 들어오는 날을 골라 주세요."; err.hidden = false; day.focus(); return; }
+      btn.disabled = true;
+      var body = { work: a.work, health: a.health, vat: a.vat, home: a.home, car: a.car, irregular: irregular.checked,
+        family: FAMILY.map(function (f) { return f[0]; }).filter(function (k) { return fam[k]; }) };
+      rest("POST", "rpc/set_my_situation", { p: body })
+        .then(function () { return rest("POST", "rpc/set_my_care", { p_payday: Number(day.value), p_notify: null }); })
+        .then(onDone, function (e) { btn.disabled = false; err.textContent = e.message; err.hidden = false; });
+    } });
+    kids.push(err, btn);
+    refresh();
+    return el("section", { class: "panel" }, kids);
+  }
+
   /* ---------- 화면: 계약 고객의 첫 화면 (상담 동의 · 후기 · 사전 작성지) ---------- */
   function viewClientHome(me, opts) {
-    var tab = null, holder = el("div"), tabs = el("div", { class: "tabs" }), note = el("p", { class: "msg", hidden: true });
+    var tab = null, holder = el("div"), tabs = el("div", { class: "tabs tabs-wrap" }), note = el("p", { class: "msg", hidden: true }), editSitu = false;
     function drawTabs() {
       tabs.textContent = "";
-      [["agree", "상담 동의"], ["review", "후기 작성"], ["sheet", "사전 작성지"]].forEach(function (t) {
+      [["agree", "상담 동의"], ["pay", "월급날 도장판"], ["review", "후기 작성"], ["sheet", "사전 작성지"], ["set", "설정"]].forEach(function (t) {
         tabs.appendChild(el("button", { type: "button", "aria-pressed": String(tab === t[0]), text: t[1], onclick: function () { note.hidden = true; go(t[0]); } }));
       });
     }
@@ -546,15 +786,26 @@
       tab = t; drawTabs();
       if (message) { note.textContent = message; note.hidden = false; }
       holder.textContent = ""; holder.appendChild(el("p", { class: "muted", text: "불러오는 중입니다." }));
-      var p = t === "agree" ? viewAgreement(me, function () { go("review", "동의를 저장했습니다. 이어서 후기를 적어 주실 수 있습니다."); })
+      var gated = (t === "pay" || t === "set") ? loadCare(me).then(function (care) {
+        if (care && care.situation_at && !editSitu) return null;
+        editSitu = false;
+        return viewSituation(me, care || {}, function () { go("pay", "저장했습니다. 이제 월급날 도장판을 쓸 수 있습니다."); });
+      }) : Promise.resolve(null);
+      var p = gated.then(function (q) {
+        if (q) return q;
+        return t === "agree" ? viewAgreement(me, function () { go("pay", "동의를 저장했습니다."); })
         : t === "review" ? viewReview(me, function (m) { go("review", m); })
+        : t === "pay" ? viewPayday(me, function (m, again) { payAgain = !!again; go("pay", m); })
+        : t === "set" ? viewCareSettings(me, function (m, edit) { editSitu = !!edit; go("set", m); })
         : openOwnWorksheet(me, opts);
+      });
       p.then(function (n) { holder.textContent = ""; holder.appendChild(n); window.scrollTo(0, 0); },
         function (e) { holder.textContent = ""; holder.appendChild(el("p", { class: "msg bad", text: e.message })); });
     }
     return loadAgreement(me).then(function (done) {
-      go(done ? "review" : "agree");
-      return el("div", {}, [tabs, note, holder]);
+      go(done ? "pay" : "agree");                    // 동의를 마친 고객은 월급날 도장판부터
+      var later = false; try { later = sessionStorage.getItem("rn_install_later") === "1"; } catch (e) { /* 넘어간다 */ }
+      return el("div", {}, [later || (opts && opts.advisor) ? null : installGuide(false), tabs, note, holder]);
     });
   }
 
@@ -562,16 +813,16 @@
   var STATUS = [["lead", "신청"], ["lecture", "강의 참석"], ["contracted", "계약 고객"], ["ended", "관리 종료"]];
   function viewAdvisor(me) {
     var tab = "book"; var holder = el("div");
-    var tabs = el("div", { class: "tabs" });
+    var tabs = el("div", { class: "tabs tabs-wrap" });
     function drawTabs() {
       tabs.textContent = "";
-      [["book", "예약 관리"], ["stats", "통계"], ["list", "고객 목록"], ["reviews", "후기"], ["mine", "고객 화면 시험 (내 계정)"]].forEach(function (t) {
+      [["book", "예약 관리"], ["stats", "통계"], ["list", "고객 목록"], ["pay", "월급날 · 소개"], ["reviews", "후기"], ["mine", "고객 화면 시험 (내 계정)"]].forEach(function (t) {
         tabs.appendChild(el("button", { type: "button", "aria-pressed": String(tab === t[0]), text: t[1], onclick: function () { pickTab(t[0]); } }));
       });
     }
     function go() {
       holder.textContent = ""; holder.appendChild(el("p", { class: "muted", text: "불러오는 중입니다." }));
-      var p = tab === "mine" ? viewClientHome(me, { advisor: true }) : tab === "book" ? viewBookings(go) : tab === "reviews" ? reviews() : tab === "stats" ? statsView() : list();
+      var p = tab === "mine" ? viewClientHome(me, { advisor: true }) : tab === "book" ? viewBookings(go) : tab === "reviews" ? reviews() : tab === "stats" ? statsView() : tab === "pay" ? paydayView() : list();
       p.then(function (n) { holder.textContent = ""; holder.appendChild(n); }, function (e) { holder.textContent = ""; holder.appendChild(el("p", { class: "msg bad", text: e.message })); });
     }
     function pickTab(t) { tab = t; drawTabs(); window.scrollTo(0, 0); go(); }   // 탭을 바꾸면 맨 위에서 시작
@@ -600,14 +851,76 @@
           el("p", { class: "src", text: "‘계약 고객’으로 바꾸면 그 고객이 상담 동의 · 후기 작성 · 사전 작성지를 쓸 수 있습니다. 고객이 카카오로 한 번 로그인해야 이 목록에 나타납니다. 화면에 고객 이름이 보이니 다른 사람이 보는 곳에서는 열지 마세요." })]);
       });
     }
+
+    /* ---------- 월급날 · 소개: 오늘 월급날인 고객 · 이번 달 도장 · 약속 적기 · 소개 표 ---------- */
+    function paydayView() {
+      var today = seoulToday(), ym = today.slice(0, 7), mon = Number(today.slice(5, 7)), dayNow = Number(today.slice(8, 10));
+      var lastDay = new Date(Number(today.slice(0, 4)), mon, 0).getDate();
+      var L = PAY ? PAY.months[mon] : null;
+      var appUrl = new URL("index.html", location.href); appUrl.search = "?s=pay"; appUrl.hash = "";
+      return Promise.all([
+        rest("GET", "profiles?select=id,display_name,status,role&status=eq.contracted&order=created_at.desc"),
+        rest("GET", "care?select=*"),
+        rest("GET", "stamps?select=*&order=month.desc&limit=400"),
+        rest("POST", "rpc/referrals", {}).then(null, function () { return null; })      // 통계 SQL(008)이 아직이면 비워 둔다
+      ]).then(function (res) {
+        var careBy = {}; (res[1] || []).forEach(function (c) { careBy[c.client_id] = c; });
+        var stampsBy = {}; (res[2] || []).forEach(function (s) { (stampsBy[s.client_id] = stampsBy[s.client_id] || []).push(s); });
+        var due = [], rows = (res[0] || []).map(function (p) {
+          var c = careBy[p.id] || {}, st = stampsBy[p.id] || [], cur = st.filter(function (s) { return s.month.slice(0, 7) === ym; })[0];
+          var isToday = c.notify && c.payday && Math.min(c.payday, lastDay) === dayNow;
+          if (isToday) due.push(p.display_name || "(이름 없음)");
+          var two = st.length >= 2 ? PAY.seats.filter(function (s) { return st[0].kept[s.key] === false && st[1].kept[s.key] === false; }).map(function (s) { return s.seat; }) : [];
+          var dayIn = el("input", { type: "number", min: "1", max: "31", value: c.payday || "", "aria-label": "월급날", style: "width:5em" });
+          var ins = {}; PAY.seats.forEach(function (s) { ins[s.key] = el("input", { type: "text", maxlength: "60", value: (c.promise || {})[s.key] || "", placeholder: "예) 한 달 ○○만 원까지 (상품 이름은 적지 않습니다)", "aria-label": s.seat + " 약속" }); });
+          var saved = el("span", { class: "muted" });
+          var edit = el("details", {}, [el("summary", { class: "link-btn", text: "월급날 · 네 자리 약속 적기" }),
+            el("div", { class: "wide" }, [el("label", { text: "월급날 (1~31 · 31은 말일)" }), dayIn])].concat(PAY.seats.map(function (s) {
+              return el("div", { class: "wide" }, [el("label", { text: s.seat + " (" + s.ghost + ")" }), ins[s.key]]);
+            }), [el("button", { class: "btn btn-main", type: "button", text: "저장", onclick: function () {
+              var d = dayIn.value === "" ? null : Number(dayIn.value);
+              if (d !== null && !(d >= 1 && d <= 31)) { tell("월급날은 1부터 31 사이로 적어 주세요."); return; }
+              var pr = {}; PAY.seats.forEach(function (s) { var v = ins[s.key].value.trim(); if (v) pr[s.key] = v; });
+              rest("POST", "care?on_conflict=client_id", { client_id: p.id, payday: d, promise: pr }, "resolution=merge-duplicates")
+                .then(function () { saved.textContent = " 저장했습니다."; }, function (e) { tell(e.message); });
+            } }), saved]));
+          var msg = (p.display_name ? p.display_name + "님, " : "") + PAY.kakao + "\n" + appUrl.href;
+          return el("tr", {}, [
+            el("td", { text: (p.display_name || "(이름 없음)") + (isToday ? " · 오늘 월급날" : "") }),
+            el("td", { text: c.payday ? (c.payday === 31 ? "말일" : c.payday + "일") : "—" }),
+            el("td", { text: c.notify ? "켬" : "끔" }),
+            el("td", { text: cur ? "찍음 · 지킨 자리 " + PAY.seats.filter(function (s) { return cur.kept[s.key]; }).length + "곳" : "아직" }),
+            el("td", { text: (cur && cur.note ? "한 줄: " + cur.note : "") + (two.length ? (cur && cur.note ? " / " : "") + "두 달째 못 지킴: " + two.join(" · ") : "") || "—" }),
+            el("td", {}, [c.notify ? el("button", { class: "link-btn", type: "button", text: "알림 문구 복사", onclick: function () { copyText(msg, function () { tell("복사했습니다. 카카오톡에 붙여 넣어 보내세요.\n\n" + msg); }); } }) : null, edit])
+          ]);
+        });
+        var refs = res[3];
+        return el("section", { style: "display:grid;gap:24px" }, [
+          el("h1", { text: "월급날 · 소개" }),
+          el("p", { class: "msg", text: due.length ? "오늘 월급날(알림 켬): " + due.join(" · ") : "오늘 월급날인 고객(알림 켬)은 없습니다." }),
+          el("div", { class: "table-wrap" }, [el("table", { class: "clients" }, [
+            el("thead", {}, [el("tr", {}, ["이름", "월급날", "알림", mon + "월 도장", "살필 것", ""].map(function (h) { return el("th", { text: h }); }))]),
+            el("tbody", {}, rows.length ? rows : [el("tr", {}, [el("td", { colspan: "6", text: "계약 고객이 아직 없습니다." })])])])]),
+          el("p", { class: "src", text: "알림은 고객이 자기 화면의 ‘설정’에서 켜고 끕니다. 켠 고객에게만 보내세요. 자동으로 나가는 것은 없고, 월급날 아침 8시 30분에 담당자 휴대폰으로 ‘오늘 월급날 고객 n명’만 옵니다. 다달이 보내는 연락과 소개 답례는 소속 회사 규정을 먼저 확인하세요(확인 필요)." }),
+          el("div", { class: "panel" }, [el("h2", { text: "소개" }), el("p", { class: "muted", text: "고객의 ‘친구에게 보내기’ 주소로 들어온 방문 · 테스트를 끝낸 방문 · 상담 신청 수입니다." }),
+            refs === null ? el("p", { class: "msg", text: "방문 통계가 아직 켜지지 않아 셀 수 없습니다." })
+              : el("div", { class: "table-wrap" }, [el("table", { class: "clients" }, [
+                  el("thead", {}, [el("tr", {}, ["이름", "코드", "들어온 방문", "테스트 끝냄", "상담 신청"].map(function (h) { return el("th", { text: h }); }))]),
+                  el("tbody", {}, refs.length ? refs.map(function (r) { return el("tr", {}, [r.name, r.ref_code, r.visits, r.results, r.bookings].map(function (v) { return el("td", { text: String(v) }); })); })
+                    : [el("tr", {}, [el("td", { colspan: "5", text: "아직 기록이 없습니다." })])])])])])
+        ]);
+      });
+    }
     /* ---------- 통계: 방문 · 머문 시간 · 단계별 전환 · 유입 경로 ---------- */
     var statDays = 7;
     function statsView() {
       var VIEW_NAME = { home: "홈", check: "자가 점검", how: "진행 방식", cases: "상담 사례", faq: "자주 묻는 질문", apply: "상담 신청", privacy: "처리방침" };
-      var SRC_NAME = { direct: "직접 들어옴 · 링크", naver: "네이버", google: "구글", kakao: "카카오 · 다음", instagram: "인스타그램", youtube: "유튜브", facebook: "페이스북", threads: "스레드" };
+      var SRC_NAME = { direct: "직접 들어옴 · 링크", naver: "네이버", google: "구글", kakao: "카카오 · 다음", instagram: "인스타그램", youtube: "유튜브", facebook: "페이스북", threads: "스레드", ig: "인스타그램(꼬리표)", th: "스레드(꼬리표)", yt: "유튜브(꼬리표)", blog: "블로그", card: "명함 · 인쇄물", sh: "공유 주소로 옴", img: "결과 그림으로 옴", pay: "월급날 알림", ad: "광고" };
       var DEV_NAME = { mobile: "휴대폰", tablet: "태블릿", desktop: "PC" };
       var to = KST_KEY.format(new Date()), from = KST_KEY.format(new Date(Date.now() - (statDays - 1) * 86400000));
       function dur(ms) { ms = Number(ms) || 0; var s = Math.round(ms / 1000); return s < 60 ? s + "초" : Math.floor(s / 60) + "분 " + (s % 60) + "초"; }
+      var GHOST_NAME = { dalkom: "달콤귀", jiltu: "질투귀", buran: "불안귀", tamyok: "탐욕귀", dondok: "돈독귀신(넷 다)", none: "돈깨비만(해당 없음)" };
+      function crit(a, b, line) { return !b ? "—" : a / b >= line ? "넘음" : "아직"; }
       function pct(a, b) { return b ? (Math.round(a / b * 1000) / 10) + "%" : "—"; }
       function won(v) { return v == null || !isFinite(v) ? "—" : Math.round(v).toLocaleString("ko-KR") + "원"; }
       function table(heads, rows) {
@@ -619,9 +932,63 @@
       function bar(v, max) { return el("div", { class: "stat-bar" }, [el("i", { style: "width:" + (max ? Math.max(2, Math.round(v / max * 100)) : 0) + "%" }), el("span", { text: String(v) })]); }
       return Promise.all([
         rest("POST", "rpc/stats", { p_from: from, p_to: to }),
-        rest("GET", "ad_costs?select=*&day=gte." + from + "&day=lte." + to + "&order=day.desc")
+        rest("GET", "ad_costs?select=*&day=gte." + from + "&day=lte." + to + "&order=day.desc"),
+        rest("GET", "lecture_logs?select=*&order=day.desc"),          // 손으로 적는 기록은 기간과 상관없이 전부
+        rest("GET", "mention_logs?select=*&order=day.desc")
       ]).then(function (res) {
-        var s = res[0] || {}, costs = res[1] || [], t = s.total || {};
+        var s = res[0] || {}, costs = res[1] || [], lectures = res[2] || [], mentions = res[3] || [], t = s.total || {};
+        var lecSurveys = lectures.reduce(function (a, l) { return a + l.surveys; }, 0), lecNamed = lectures.reduce(function (a, l) { return a + l.named; }, 0);
+
+        function delBtn(path) { return el("button", { class: "link-btn", type: "button", text: "지우기", onclick: function () { ask("이 기록을 지울까요?", "지우기").then(function (ok) { if (ok) rest("DELETE", path).then(go, function (e) { tell(e.message); }); }); } }); }
+        /* 강의 기록 적기 */
+        var lDay = el("input", { type: "date", value: to, "aria-label": "강의 날짜" });
+        var lTag = el("input", { type: "text", maxlength: "20", placeholder: "예) lec-2701a (QR에 붙인 꼬리표)", "aria-label": "강의 꼬리표" });
+        var lAtt = el("input", { type: "number", min: "0", "aria-label": "참석 수" });
+        var lSur = el("input", { type: "number", min: "0", "aria-label": "걷은 설문 수" });
+        var lNam = el("input", { type: "number", min: "0", "aria-label": "이름을 맞게 적은 수" });
+        var lNote = el("input", { type: "text", maxlength: "100", placeholder: "회사 · 사람 이름은 적지 않습니다", "aria-label": "메모" });
+        var lErr = el("p", { class: "msg bad", hidden: true });
+        var lecBox = el("details", { class: "panel" }, [
+          el("summary", { text: "강의 기록 적기 (캐릭터 이름을 기억하는 비율)" }),
+          el("p", { class: "muted", text: "강의 끝 종이 설문에서 ‘기억나는 캐릭터 이름’을 하나라도 맞게 적은 수를 적습니다." }),
+          el("div", { class: "wide" }, [el("label", { text: "날짜" }), lDay]),
+          el("div", { class: "wide" }, [el("label", { text: "강의 꼬리표(선택)" }), lTag]),
+          el("div", { class: "wide" }, [el("label", { text: "참석 수" }), lAtt]),
+          el("div", { class: "wide" }, [el("label", { text: "걷은 설문 수" }), lSur]),
+          el("div", { class: "wide" }, [el("label", { text: "이름을 맞게 적은 수" }), lNam]),
+          el("div", { class: "wide" }, [el("label", { text: "메모(선택)" }), lNote]),
+          lErr,
+          el("button", { class: "btn btn-main", type: "button", text: "적기", onclick: function () {
+            var a = Number(lAtt.value), sv = Number(lSur.value), nm = Number(lNam.value);
+            if (!lDay.value || lAtt.value === "" || lSur.value === "" || lNam.value === "" || !(a >= 0) || !(sv >= 0) || !(nm >= 0) || nm > sv) {
+              lErr.textContent = "날짜와 숫자 셋을 적어 주세요. 이름을 맞게 적은 수는 걷은 설문 수보다 클 수 없습니다."; lErr.hidden = false; return;
+            }
+            rest("POST", "lecture_logs", { day: lDay.value, tag: lTag.value.trim().toLowerCase() || null, attendees: Math.round(a), surveys: Math.round(sv), named: Math.round(nm), note: lNote.value.trim() || null })
+              .then(go, function (e) { lErr.textContent = e.message; lErr.hidden = false; });
+          } })
+        ].concat(lectures.map(function (l) {
+          return el("div", { class: "wide" }, [el("label", { text: l.day + (l.tag ? " · " + l.tag : "") + " · 참석 " + l.attendees + " · 설문 " + l.surveys + " · 이름 맞힘 " + l.named + (l.note ? " · " + l.note : "") }),
+            el("div", {}, [delBtn("lecture_logs?id=eq." + l.id)])]);
+        })));
+        /* 한 줄 기록 적기 */
+        var mDay = el("input", { type: "date", value: to, "aria-label": "날짜" });
+        var mPlace = el("select", { "aria-label": "어디서" }, ["상담", "강의", "메시지", "SNS", "지인"].map(function (x) { return el("option", { text: x }); }));
+        var mLine = el("input", { type: "text", maxlength: "120", placeholder: "예) 강의 뒤 담당자가 ‘우리 팀은 탐욕귀래요’라고 함", "aria-label": "한 줄" });
+        var mErr = el("p", { class: "msg bad", hidden: true });
+        var menBox = el("details", { class: "panel" }, [
+          el("summary", { text: "한 줄 기록 적기 (누가 먼저 캐릭터 이야기를 꺼낸 일)" }),
+          el("p", { class: "muted", text: "고객 이름은 적지 않습니다." }),
+          el("div", { class: "wide" }, [el("label", { text: "날짜" }), mDay]),
+          el("div", { class: "wide" }, [el("label", { text: "어디서" }), mPlace]),
+          el("div", { class: "wide" }, [el("label", { text: "한 줄" }), mLine]),
+          mErr,
+          el("button", { class: "btn btn-main", type: "button", text: "적기", onclick: function () {
+            if (!mDay.value || !mLine.value.trim()) { mErr.textContent = "날짜와 한 줄을 적어 주세요."; mErr.hidden = false; return; }
+            rest("POST", "mention_logs", { day: mDay.value, place: mPlace.value, line: mLine.value.trim() }).then(go, function (e) { mErr.textContent = e.message; mErr.hidden = false; });
+          } })
+        ].concat(mentions.map(function (m) {
+          return el("div", { class: "wide" }, [el("label", { text: m.day + " · " + m.place + " · " + m.line }), el("div", {}, [delBtn("mention_logs?id=eq." + m.id)])]);
+        })));
         var range = el("div", { class: "tabs" }, [[1, "오늘"], [7, "7일"], [30, "30일"], [90, "90일"]].map(function (d) {
           return el("button", { type: "button", "aria-pressed": String(statDays === d[0]), text: d[1], onclick: function () { statDays = d[0]; go(); } });
         }));
@@ -691,7 +1058,20 @@
           sec("단계별 전환", "방문한 사람이 어디까지 갔는지입니다. 숫자가 크게 줄어드는 단계가 손볼 곳입니다.", funnel),
           sec("날짜별", null, daily),
           sec("화면별", "어느 메뉴를 많이 보고 오래 머무는지입니다.", views),
-          sec("들어온 경로별", "링크 끝에 ?from=이름 을 붙여 보내면 경로가 나뉩니다(예: 인스타 프로필 링크는 …/?from=instagram, 강의 QR은 …/?from=lecture).", srcs),
+          sec("들어온 경로별", "링크에 ?s=이름 을 붙여 보내면 경로가 나뉩니다(예: 인스타 소개 칸은 …/?s=ig#check, 강의 QR은 …/?s=lec-2701a#check, 명함은 …/?s=card). 예전의 ?from=이름 도 그대로 됩니다.", srcs),
+          sec("캐릭터 1단계 기준", (t.result || 0) < 100 ? "결과를 본 방문이 100이 안 됩니다. 아직 판단하기 이릅니다(숫자가 작으면 비율이 크게 출렁입니다)." : "결과를 본 방문 " + (t.result || 0) + " 기준입니다.",
+            table(["기준", "지금", "기준선", "넘었는지"], [
+              ["끝까지 한 비율 (결과 ÷ 시작)", pct(t.result || 0, s.check_start || 0), "60%", crit(t.result || 0, s.check_start || 0, 0.6)],
+              ["공유 (‘친구에게 테스트 보내기’ ÷ 결과)", pct(s.share || 0, t.result || 0), "10%", crit(s.share || 0, t.result || 0, 0.1)],
+              ["신청 화면으로 간 비율 (‘이 결과로 상담 신청’ ÷ 결과)", pct(s.to_apply || 0, t.result || 0), "5%", crit(s.to_apply || 0, t.result || 0, 0.05)],
+              ["캐릭터 이름을 기억한 비율 (강의 설문 · 전체 기간)", lecSurveys ? pct(lecNamed, lecSurveys) + " (" + lecNamed + " / " + lecSurveys + ")" : "강의 기록 없음", "50%", crit(lecNamed, lecSurveys, 0.5)],
+              ["먼저 캐릭터 이야기를 꺼낸 일 (전체 기간)", mentions.length + "번", "5번", mentions.length >= 5 ? "넘음" : "아직"],
+              ["공유 주소 · 결과 그림으로 들어온 방문 (?s=sh · ?s=img)", String(s.shared_in || 0), "—", "—"]
+            ])),
+          lecBox, menBox,
+          sec("경로별 테스트 결과", "강의 QR에 ?s=lec-코드 를 붙이면 그 강의의 귀신 분포가 여기에 따로 나옵니다.", table(["들어온 경로", "나온 결과", "횟수"], (s.who_by_src || []).map(function (w) {
+            return [SRC_NAME[w.src] || w.src, GHOST_NAME[w.who] || w.who, w.c];
+          }))),
           sec("돈독귀신 테스트", "테스트를 시작한 방문 " + (s.check_start || 0) + " · 결과까지 본 방문 " + (t.result || 0) + " (" + pct(t.result || 0, s.check_start || 0) + ")", table(["나온 결과", "횟수"], (s.check_who || []).map(function (w) {
             var NAME = { dalkom: "달콤귀", jiltu: "질투귀", buran: "불안귀", tamyok: "탐욕귀", dondok: "돈독귀신(넷 다)", none: "돈깨비만(해당 없음)" };
             return [NAME[w.who] || w.who, w.c];

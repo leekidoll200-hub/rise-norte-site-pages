@@ -159,30 +159,105 @@
      어느 귀신의 문항을 많이 눌렀는지로 결과를 낸다. 넷 모두 2개 이상이면 돈독귀신, 하나도 없으면 돈깨비만.
      귀신은 겁주는 존재가 아니라 누구에게나 있는 것이고, 자리를 정해 주면 얌전해진다는 것이 결론이다.
      수익 약속 · 지어낸 숫자 · 손실 협박은 넣지 않는다. */
+  /* 주소 꼬리표(?s=ig · lec-코드 · sh …)를 이 방문 동안 기억한다. 상담 신청의 ‘만난 경로’에 같이 붙인다. */
+  var TAG = "", REF = "";
+  try {
+    var q0 = new URLSearchParams(location.search);
+    var s0 = (q0.get("s") || "").toLowerCase().replace(/[^a-z0-9_.-]/g, "").slice(0, 20);
+    if (s0) sessionStorage.setItem("rn_tag", s0);
+    TAG = sessionStorage.getItem("rn_tag") || "";
+    var r0 = (q0.get("r") || "").toUpperCase();
+    if (/^[A-Z2-9]{5}$/.test(r0)) sessionStorage.setItem("rn_ref", r0);     // 소개한 고객의 코드(무작위 다섯 글자 · 이름과 상관없음)
+    REF = sessionStorage.getItem("rn_ref") || "";
+    var g0 = q0.get("g");
+    if (g0 && /^(dalkom|jiltu|buran|tamyok|dondok)$/.test(g0)) {
+      var GN = { dalkom: "달콤귀", jiltu: "질투귀", buran: "불안귀", tamyok: "탐욕귀", dondok: "돈독귀신" };
+      var from = el("p", "check-from", "테스트를 보내 준 분은 " + GN[g0] + "가 나왔습니다. 나는 어떤 귀신일까요?");
+      $("checkForm").parentNode.insertBefore(from, $("checkForm"));
+    }
+    var chSel = $("f-ch"), CH = /^(ig|th)$/.test(TAG) ? "인스타그램 · 스레드" : /^(yt|blog)$/.test(TAG) ? "유튜브 · 블로그" : /^lec/.test(TAG) ? "법인 강의" : /^(sh|img)$/.test(TAG) || REF ? "소개" : "";
+    if (CH && chSel && !chSel.value) chSel.value = CH;
+  } catch (e) { /* 저장 칸을 못 써도 넘어간다 */ }
   var checkForm = $("checkForm");
+  /* 문항 모음: 귀신마다 다섯 개(모두 스무 개). 화면에는 귀신마다 세 개씩 열두 개만 낸다.
+     맨 앞의 것이 ‘자리’ 문항(그 귀신의 자리가 비어 있는가)이라 늘 나오고, 나머지 넷 가운데 둘을 그때그때 고른다.
+     열두 개를 넘기지 않는 까닭: 문항이 늘수록 끝까지 가는 사람이 준다(docs/HISTORY.md 2026-11-19 조사 기록).
+     적는 꼴: [상담 신청에 넘길 짧은 이름, 화면에 보이는 문항] */
+  var POOL = {
+    dalkom: [
+      ["돈 흐름 모름", "월급이 들어오면 어디로 얼마가 나가는지 바로 말하기 어렵다"],
+      ["보상 결제", "힘든 날에는 ‘오늘 고생했으니까’ 하며 계획에 없던 결제를 한다"],
+      ["작은 결제 합 모름", "구독 · 할부 · 작은 결제가 한 달에 모두 얼마인지 합쳐 본 적이 없다"],
+      ["할인에 구매", "할인 · 무료 배송 · ‘오늘만’이라는 말에 필요 없던 것을 산 적이 있다"],
+      ["명세서 보고 놀람", "카드 명세서를 보고 ‘이걸 언제 썼지’ 싶었던 적이 있다"]],
+    jiltu: [
+      ["돈의 목적 없음", "모으고는 있는데, 무엇을 위한 돈인지 정해져 있지 않다"],
+      ["남 따라 가입", "남이 좋다고 해서 가입하거나 산 금융상품이 있다"],
+      ["수익 인증에 흔들림", "SNS · 유튜브의 수익 인증을 보고 마음이 흔들린 적이 있다"],
+      ["주변 씀씀이에 맞춤", "친구 · 동료가 차 · 집 · 여행에 쓰는 것을 보면 나도 맞춰야 할 것 같다"],
+      ["또래와 견줘 조급", "또래보다 모은 돈이 적은 것 같아 조급해진 적이 있다"]],
+    buran: [
+      ["비상금 없음", "비상금이 따로 없거나, 있어도 다른 돈과 섞여 있다"],
+      ["석 달 넘게 미룸", "정리해야지 하면서 미룬 지 석 달이 넘었다"],
+      ["보장 내용 모름", "걱정돼서 가입은 했는데, 내 보험이 무엇을 보장하는지 설명하기 어렵다"],
+      ["잔액 보기 겁남", "통장 · 카드 앱을 열어 보기가 겁나서 미룬 적이 있다"],
+      ["필요한 돈 계산 안 함", "노후나 큰일이 걱정은 되는데, 얼마가 필요한지 계산해 본 적은 없다"]],
+    tamyok: [
+      ["쓸 때 안 정한 투자", "주식 · 코인에 넣은 돈을, 언제 쓸 돈인지 정하지 않고 넣었다"],
+      ["되찾으려 더 넣음", "잃은 돈을 한 번에 되찾으려고 더 넣은 적이 있다"],
+      ["한 번에 크게", "천천히 모으는 것은 답답하고, 크게 불릴 방법이 따로 있을 것 같다"],
+      ["감당 넘는 금액", "‘이번만 잘되면’ 하는 마음으로 감당하기 어려운 금액을 넣은 적이 있다"],
+      ["알아보기 전에 넣음", "오를 것 같다는 말에, 내용을 알아보기 전에 먼저 넣은 적이 있다"]]
+  };
+  function shuffled(a) {
+    a = a.slice();
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  /* 열두 문항을 새로 뽑아 화면에 놓는다. 세 바퀴를 돌며 귀신마다 하나씩 놓고, ‘자리’ 문항은 마지막 바퀴에 둔다. */
+  function buildCheck() {
+    var keys = ["dalkom", "jiltu", "buran", "tamyok"], pick = {}, n = 0;
+    keys.forEach(function (g) { var two = shuffled(POOL[g].slice(1)).slice(0, 2); pick[g] = [two[0], two[1], POOL[g][0]]; });
+    checkForm.textContent = "";
+    for (var round = 0; round < 3; round++) {
+      shuffled(keys).forEach(function (g) {
+        var q = pick[g][round], label = el("label", "check"), input = document.createElement("input");
+        input.type = "checkbox"; input.value = q[0]; input.setAttribute("data-g", g);
+        if (round === 2) input.setAttribute("data-seat", "1");
+        n++;
+        var tick = el("span", "tick"); tick.setAttribute("aria-hidden", "true");
+        label.appendChild(input);
+        label.appendChild(el("span", "num", (n < 10 ? "0" : "") + n));
+        label.appendChild(el("span", "check-t", q[1]));
+        label.appendChild(tick);
+        checkForm.appendChild(label);
+      });
+    }
+  }
+  buildCheck();
   var checked = [];
   var CHECK_TOTAL = checkForm.querySelectorAll("input").length;
   var GHOSTS = {
     dalkom: { name: "달콤귀", nick: "오늘을 즐길 줄 아는 사람", color: "#D9488F", img: "assets/ghost_dalkom.webp",
       say: "오늘 고생했잖아. 이 정도는 괜찮아, 응?",
-      tame: "즐기는 돈을 따로 떼어 ‘한 달에 여기까지’만 정해 보세요. 그 안에서는 마음 편히 쓰셔도 됩니다.",
-      seat: "자리를 찾으면 달콤귀는 기쁨 담당이 됩니다. 정해 둔 만큼은 마음 편히 즐기게 해 줍니다." },
+      tame: "즐기는 돈에 ‘한 달에 여기까지’ 금을 긋자. 그 안에서는 마음껏 쓰는 거야!",
+      seat: "자리를 찾으면 달콤귀는 기쁨 담당이 돼. 정해 둔 만큼은 마음 편히 즐기게 해 줘." },
     jiltu: { name: "질투귀", nick: "지고는 못 사는 사람", color: "#3567D6", img: "assets/ghost_jiltu.webp",
       say: "쟤는 벌써 저만큼 갔대. 너만 그대로래.",
-      tame: "무엇을 위해 언제까지 모을지 한 줄로 적어 보세요. 견줄 상대가 남에서 내 목표로 바뀝니다.",
-      seat: "자리를 찾으면 질투귀는 기록 담당이 됩니다. 남의 소식 대신 ‘지난달보다 얼마나 왔는지’를 물어 옵니다." },
+      tame: "남 말고 네 목표를 적어 보자. 무엇을 위해, 언제까지. 그럼 저 녀석도 견줄 데가 생겨.",
+      seat: "자리를 찾으면 질투귀는 기록 담당이 돼. 남의 소식 대신 ‘지난달보다 얼마나 왔는지’를 물어 와." },
     buran: { name: "불안귀", nick: "돌다리도 두들겨 보는 사람", color: "#2A9A5C", img: "assets/ghost_buran.webp",
       say: "근데… 잘못되면 어쩌지? 조금만 더 알아보고 하자…",
-      tame: "만일을 위한 돈부터 따로 떼어 두세요. 기댈 곳이 생기면 미루던 결정이 쉬워집니다.",
-      seat: "자리를 찾으면 불안귀는 경보 담당이 됩니다. 아무 때나 울지 않고 정말 살펴볼 일이 있을 때만 알려 줍니다." },
+      tame: "만일을 위한 돈부터 따로 떼어 두자. 기댈 데가 있으면 저 녀석도 덜 떨어.",
+      seat: "자리를 찾으면 불안귀는 경보 담당이 돼. 아무 때나 울지 않고 정말 살펴볼 일이 있을 때만 알려 줘." },
     tamyok: { name: "탐욕귀", nick: "크게 그리는 사람", color: "#CF3434", img: "assets/ghost_tamyok.webp",
       say: "조금씩 해서 언제 모아? 한 번에 가자!",
-      tame: "불리는 돈에는 ‘언제 쓸 돈인지’와 ‘여기까지만’을 먼저 정해 보세요. 그 안에서는 길게 두셔도 됩니다.",
-      seat: "자리를 찾으면 탐욕귀는 성장 담당이 됩니다. 급한 성미가 오래 버티는 끈기로 바뀝니다." },
+      tame: "불리는 돈에는 ‘언제 쓸 돈인지’와 ‘여기까지만’을 먼저 적자. 급한 성미는 그 안에서만 부리는 거야.",
+      seat: "자리를 찾으면 탐욕귀는 성장 담당이 돼. 급한 성미가 오래 버티는 끈기로 바뀌어." },
     dondok: { name: "돈독귀신", nick: "넷이 다 모인 사람", color: "#7B3FBF", img: "assets/dondok.webp",
       say: "어머, 넷이 다 와 있네. 편하게 있어. 지금 그대로.",
-      tame: "넷을 한꺼번에 잡으려 하면 지칩니다. 어디가 새는지부터 보고 하나씩 자리를 정하면 됩니다.",
-      seat: "자리를 찾으면 돈독귀신은 사라지지 않고 흩어집니다. 네 귀신이 각자 자리로 갑니다." }
+      tame: "넷을 한꺼번에 상대하면 져. 어디가 새는지부터 보고, 하나씩 자리를 정하자구!",
+      seat: "자리를 찾으면 돈독귀신은 사라지지 않고 흩어져. 네 귀신이 각자 자리로 가는 거야." }
   };
   var G_ORDER = ["dalkom", "jiltu", "buran", "tamyok"];
   var LEVEL = ["조용함", "속삭이는 중", "제법 시끄러움", "날뛰는 중"];
@@ -225,7 +300,7 @@
     box.className = "ghost-result" + (force || r.key !== lastKey ? " pop" : "");
     if (r.key === "none") {
       box.style.setProperty("--g", "#8A6A1F");
-      box.appendChild(bubble("say-good", "guide-face", null, "돈깨비", ["해당되는 것이 하나도 없으시군요. 귀신들이 다 제자리에 앉아 있습니다. 맞게 가고 있는지 확인하고 싶으시면 상담에서 같이 보시죠."]));
+      box.appendChild(bubble("say-good", "guide-face", null, "돈깨비", ["어이쿠, 귀신들이 다 제자리에 앉아 있네! 자리가 흐트러지지 않았는지만 가끔 같이 보자."]));
     } else {
       var g = GHOSTS[r.key];
       box.style.setProperty("--g", g.color);
@@ -253,16 +328,30 @@
       if (r.also.length) box.appendChild(el("p", "gr-also", "옆에 " + r.also.map(function (k) { return GHOSTS[k].name; }).join(" · ") + "도 와 있습니다."));
       box.appendChild(bubble("say-good", "guide-face", null, "돈깨비", [g.tame, g.seat]));
     }
-    box.appendChild(el("p", "gr-note", "귀신이 있는 것은 흠이 아닙니다. 누구에게나 있고, 자리를 정해 주면 얌전해집니다. 자리를 정하는 일은 혼자 하면 미루기 쉬우니, 순서부터 같이 잡아 보시죠."));
+    box.appendChild(el("p", "gr-note", "자리를 정하는 일은 혼자 하면 미루기 쉽습니다. 순서부터 같이 잡아 봐요."));
     var acts = el("div", "gr-acts");
     var go = el("a", "btn btn-main btn-lg", "이 결과로 상담 신청"); go.href = "#apply";
+    go.addEventListener("click", function () { if (window.RN_TRACK) window.RN_TRACK("to_apply", { view: r.key }); });
     var again = el("button", "link", "다시 하기"); again.type = "button";
     again.addEventListener("click", function () {
-      Array.prototype.forEach.call(checkForm.querySelectorAll("input"), function (i) { i.checked = false; });
+      buildCheck();                                   // 다시 할 때는 문항을 새로 뽑는다
       duelShown = false; lastKey = null; lastClicked = null; updateCheck();
       checkForm.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-    acts.appendChild(go); acts.appendChild(again);
+    /* 친구에게 테스트 보내기: 주소에 꼬리표(s=sh)와 내 결과(g=)를 붙인다. 이름 · 연락처는 주소에 넣지 않는다. */
+    var share = el("button", "btn btn-line", "친구에게 테스트 보내기"); share.type = "button";
+    var shared = el("p", "gr-shared"); shared.hidden = true; shared.setAttribute("aria-live", "polite");
+    share.addEventListener("click", function () {
+      var url = location.origin + location.pathname + "?s=sh&g=" + r.key + "#check";
+      var text = r.key === "none" ? "내 안의 돈독귀신 테스트, 너는 어떤 귀신이 나와?"
+        : "내 안의 돈독귀신 테스트 해 봤는데 나는 " + GHOSTS[r.key].name + "래. 너는 어떤 귀신이야?";
+      if (window.RN_TRACK) window.RN_TRACK("share", { view: r.key });
+      function copied() { shared.textContent = "주소를 복사했습니다. 카카오톡이나 문자에 붙여 넣어 보내세요."; shared.hidden = false; }
+      function manual() { shared.textContent = "이 주소를 길게 눌러 복사해 보내세요: " + url; shared.hidden = false; }
+      if (navigator.share) { navigator.share({ title: "내 안의 돈독귀신 테스트", text: text, url: url }).then(null, function () {}); return; }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + " " + url).then(copied, manual); else manual();
+    });
+    acts.appendChild(go); acts.appendChild(share); acts.appendChild(shared); acts.appendChild(again);
     box.appendChild(acts);
     lastKey = r.key;
   }
@@ -296,7 +385,8 @@
     duelShown = true;
     drawDuel(true);
     var r = ghostResult();
-    if (window.RN_TRACK) window.RN_TRACK("check_result", { n: checked.length, view: r.key });
+    if (window.RN_TRACK) window.RN_TRACK("check_result", { n: checked.length, view: r.key,
+      sc: G_ORDER.map(function (k) { return r.count[k]; }).join("") });   // sc = 달콤 · 질투 · 불안 · 탐욕 점수(각 0~3). 고른 문항은 보내지 않는다
     $("checkResult").scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
@@ -373,11 +463,7 @@
     if (c.review) {
       var q = el("blockquote", "review");
       q.appendChild(el("p", null, c.review));
-      q.appendChild(el("p", "src", "게시 동의를 받은 후기 · 원문 그대로"));
       card.appendChild(q);
-    }
-    if (c.example) {
-      card.appendChild(el("p", "src", "게시 동의를 확인하기 전이라 예시로 표시합니다. 누군지 알아볼 수 없게 넓힌 정보만 실었습니다."));
     }
     return card;
   }
@@ -394,7 +480,7 @@
     var shown = visible.filter(matches);
     if (!visible.length) {
       $("caseCount").textContent = "";
-      list.appendChild(guide("아직 실은 사례가 없습니다. 상담이 쌓이는 대로, 누구인지 알 수 없게 바꿔서 이곳에 올립니다."));
+      list.appendChild(guide("아직 실은 사례가 없습니다. 곧 올리겠습니다."));
       return;
     }
     $("caseCount").textContent = "사례 " + shown.length + "건";
@@ -437,7 +523,7 @@
   var form = $("applyForm");
   var done = $("applyDone");
   var SB = CONFIG.supabaseUrl, SBK = CONFIG.supabaseKey;
-  var CONSENT_VERSION = "2026-11-19";
+  var CONSENT_VERSION = "2026-11-20";   // 2026-11-20: 만난 경로에 주소의 경로 표시가 같이 붙는다는 말을 넣음
   var cal = $("cal");
   var rule = null, busy = [], freeByDay = {}, dayKeys = [], month = null, pickedDay = null, pickedHour = null, pickedAt = null;
 
@@ -591,7 +677,7 @@
     sending = true; btn.disabled = true; btn.textContent = "보내는 중…";
     var at = pickedAt;
     var payload = {
-      p_start: at.toISOString(), p_name: name, p_phone: digits, p_topics: topics, p_channel: $("f-ch").value || null,
+      p_start: at.toISOString(), p_name: name, p_phone: digits, p_topics: topics, p_channel: (($("f-ch").value || "") + (TAG ? " [" + TAG + "]" : "") + (REF ? " [r:" + REF + "]" : "")).trim().slice(0, 40) || null,
       p_check: checkSummary(),
       p_place: $("f-place").value.trim() || null, p_memo: $("f-memo").value.trim() || null, p_consent: CONSENT_VERSION
     };
