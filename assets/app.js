@@ -155,7 +155,7 @@
   }
 
   /* ---------- 1분 자가 점검 = ‘내 안의 돈독귀신 테스트’ ----------
-     설계: docs/캐릭터_사업/테스트_설계.md. 열두 문항은 네 귀신에 세 개씩 붙어 있다(문항의 data-g).
+     설계: rise-norte-character/docs/테스트_설계.md. 열두 문항은 네 귀신에 세 개씩 붙어 있다(문항의 data-g).
      어느 귀신의 문항을 많이 눌렀는지로 결과를 낸다. 넷 모두 2개 이상이면 돈독귀신, 하나도 없으면 돈깨비만.
      귀신은 겁주는 존재가 아니라 누구에게나 있는 것이고, 자리를 정해 주면 얌전해진다는 것이 결론이다.
      수익 약속 · 지어낸 숫자 · 손실 협박은 넣지 않는다. */
@@ -338,28 +338,37 @@
       duelShown = false; lastKey = null; lastClicked = null; updateCheck();
       checkForm.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-    /* 친구에게 테스트 보내기: 주소에 꼬리표(s=sh)와 내 결과(g=)를 붙인다. 이름 · 연락처는 주소에 넣지 않는다. */
     var share = el("button", "btn btn-line", "친구에게 테스트 보내기"); share.type = "button";
     var shared = el("p", "gr-shared"); shared.hidden = true; shared.setAttribute("aria-live", "polite");
-    share.addEventListener("click", function () {
-      var url = location.origin + location.pathname + "?s=sh&g=" + r.key + "#check";
-      var text = r.key === "none" ? "내 안의 돈독귀신 테스트, 너는 어떤 귀신이 나와?"
-        : "내 안의 돈독귀신 테스트 해 봤는데 나는 " + GHOSTS[r.key].name + "래. 너는 어떤 귀신이야?";
-      if (window.RN_TRACK) window.RN_TRACK("share", { view: r.key });
-      function copied() { shared.textContent = "주소를 복사했습니다. 카카오톡이나 문자에 붙여 넣어 보내세요."; shared.hidden = false; }
-      function manual() { shared.textContent = "이 주소를 길게 눌러 복사해 보내세요: " + url; shared.hidden = false; }
-      var kakao = window.RN_KAKAO_SHARE ? window.RN_KAKAO_SHARE({ title: "내 안의 돈독귀신 테스트", text: text, url: url,
-        image: new URL("assets/icons/icon_512.png", location.href).href }) : Promise.resolve(false);
-      kakao.then(function (ok) {            // 카카오톡 공유 창이 안 되면 휴대폰 공유 창, 그것도 없으면 주소 복사
-        if (ok) return;
-        if (navigator.share) { navigator.share({ title: "내 안의 돈독귀신 테스트", text: text, url: url }).then(null, function () {}); return; }
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + " " + url).then(copied, manual); else manual();
-      });
-    });
+    share.addEventListener("click", function () { shareTest(r.key, shared); });
     acts.appendChild(go); acts.appendChild(share); acts.appendChild(shared); acts.appendChild(again);
     box.appendChild(acts);
     lastKey = r.key;
   }
+  /* 친구에게 테스트 보내기. 결과를 보기 전에도 누를 수 있다(그때는 내 결과 없이 테스트 주소만 보낸다).
+     카카오톡 공유 창 → 휴대폰 공유 창 → 주소 복사 순으로 시도한다. 이름 · 연락처는 주소에 넣지 않는다. */
+  function shareTest(key, shared) {
+    var has = key && key !== "none";
+    var url = location.origin + location.pathname + "?s=sh" + (has ? "&g=" + key : "") + "#check";
+    var text = has ? "내 안의 돈독귀신 테스트 해 봤는데 나는 " + GHOSTS[key].name + "래. 너는 어떤 귀신이야?"
+      : "내 안의 돈독귀신 테스트, 너는 어떤 귀신이 나와?";
+    if (window.RN_TRACK) window.RN_TRACK("share", { view: key || "none" });
+    function copied() { shared.textContent = "주소를 복사했습니다. 카카오톡이나 문자에 붙여 넣어 보내세요."; shared.hidden = false; }
+    function manual() { shared.textContent = "이 주소를 길게 눌러 복사해 보내세요: " + url; shared.hidden = false; }
+    var kakao = window.RN_KAKAO_SHARE ? window.RN_KAKAO_SHARE({ title: "내 안의 돈독귀신 테스트", text: text, url: url,
+      image: new URL("assets/icons/icon_512.png", location.href).href }) : Promise.resolve(false);
+    kakao.then(function (ok) {
+      if (ok) return;
+      if (navigator.share) { navigator.share({ title: "내 안의 돈독귀신 테스트", text: text, url: url }).then(null, function () {}); return; }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + " " + url).then(copied, manual); else manual();
+    });
+  }
+  /* 화면 위와 아래에 늘 떠 있는 보내기 단추. 결과를 본 뒤에는 그 결과를 같이 보낸다. */
+  Array.prototype.forEach.call(document.querySelectorAll("[data-share-test]"), function (b) {
+    var msg = b.parentNode.querySelector(".gr-shared");
+    b.addEventListener("click", function () { shareTest(duelShown ? ghostResult().key : null, msg); });
+  });
+
   /* 상담 신청에 함께 넘길 글(결과와 고른 항목의 짧은 이름) */
   function checkSummary() {
     if (!checked.length) return null;

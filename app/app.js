@@ -205,6 +205,27 @@
       })
     ]));
   }
+  /* 가입 정보: 카카오 로그인만으로는 닉네임밖에 몰라 담당자 화면에 ‘(이름 없음)’으로 뜬다 → 처음 한 번 이름과 연락처를 받는다.
+     (받는 항목은 첫 로그인 동의 문구의 ‘직접 적는 이름 · 연락처’에 이미 들어 있다. 상담 신청 때 적은 이름 · 연락처와 맞춰 보는 데 쓴다.) */
+  function viewSignup(me, next) {
+    var name = el("input", { type: "text", maxlength: "20", autocomplete: "name", value: me.display_name || "", "aria-label": "이름" });
+    var tel = el("input", { type: "tel", inputmode: "tel", maxlength: "13", autocomplete: "tel", placeholder: "010-0000-0000", value: me.phone || "", "aria-label": "연락처" });
+    var err = el("p", { class: "msg bad", hidden: true });
+    var btn = el("button", { class: "btn btn-main btn-wide", type: "button", text: "저장하고 계속", onclick: function () {
+      var n = name.value.trim(), d = tel.value.replace(/\D/g, "");
+      if (!n) { err.textContent = "이름을 적어 주세요."; err.hidden = false; name.focus(); return; }
+      if (!/^01\d{8,9}$/.test(d)) { err.textContent = "휴대폰 번호를 확인해 주세요."; err.hidden = false; tel.focus(); return; }
+      btn.disabled = true;
+      rest("PATCH", "profiles?id=eq." + me.id, { display_name: n, phone: d }).then(function () { me.display_name = n; me.phone = d; next(); },
+        function (e) { btn.disabled = false; err.textContent = e.message; err.hidden = false; });
+    } });
+    show(el("section", { class: "panel" }, [
+      el("h1", { text: "가입 정보" }),
+      guide("처음 한 번만 적어 주세요. 담당 자산관리사가 누구신지 알아보는 데 씁니다."),
+      el("div", { class: "wide" }, [el("label", { text: "이름" }), name]),
+      el("div", { class: "wide" }, [el("label", { text: "연락처" }), tel]),
+      err, btn]));
+  }
   function viewWaiting(profile) {
     show(el("section", { class: "panel" }, [
       el("h1", { text: "로그인됐습니다" }),
@@ -536,7 +557,7 @@
 
 
   /* ---------- 홈 화면에 깔기(설치형 웹앱) ----------
-     설계: docs/캐릭터_사업/관리_기능_설계.md 1번. 깔면 주소창 없이 앱처럼 열린다. 알림 보내기는 아직 만들지 않았다.
+     설계: rise-norte-character/docs/관리_기능_설계.md 1번. 깔면 주소창 없이 앱처럼 열린다. 알림 보내기는 아직 만들지 않았다.
      아이폰은 사파리에서만, 안드로이드는 크롬 등에서 된다. 카카오톡 안에서 연 화면에서는 깔 수 없다. */
   var installEvt = null;
   window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); installEvt = e; });
@@ -563,7 +584,7 @@
   }
 
   /* ---------- 화면: 월급날 도장판 · 설정 (계약 고객) ----------
-     설계: docs/캐릭터_사업/월급날_돈깨비.md. 대사는 app/payday.js.
+     설계: rise-norte-character/docs/월급날_돈깨비.md. 대사는 app/payday.js.
      알림은 따로 동의서를 받지 않고 ‘설정’에서 켜고 끈다(사용자 2026-11-20). 받는 정보는 상담 확인 · 동의서 3번에 적혀 있다.
      고객에게 자동으로 보내는 것은 없다. 월급날 아침에 담당자에게만 알림이 가고, 담당자가 카카오톡으로 직접 보낸다. */
   var PAY = window.RN_PAYDAY || null, payAgain = false;
@@ -717,7 +738,7 @@
 
 
   /* ---------- 가입 질문지: 내 상황 등록 (계약 고객) ----------
-     설계: docs/캐릭터_사업/관리_기능_설계.md 2번. 다 채워야 월급날 도장판 · 설정이 열린다. ‘설정’에서 다시 고칠 수 있다.
+     설계: rise-norte-character/docs/관리_기능_설계.md 2번. 다 채워야 월급날 도장판 · 설정이 열린다. ‘설정’에서 다시 고칠 수 있다.
      고르기만 하고 적는 칸이 없다. 소득 금액 · 주민등록번호 · 계좌번호 · 건강 정보는 묻지 않는다.
      ‘돈이 들어오는 날’은 설정의 월급날과 같은 칸이다. 광고가 섞이는 ‘소식 알림’은 넣지 않았다. */
   var SITU_Q = [
@@ -1359,6 +1380,7 @@
       return rest("GET", "consents?client_id=eq." + me.id + "&kind=eq.collect&order=decided_at.desc&limit=1").then(function (c) {
         var enter = function () {
           if (me.role === "advisor") return viewAdvisor(me);
+          if (!me.display_name || !me.phone) return viewSignup(me, function () { Promise.resolve(enter()).then(null, fail); });
           if (me.status !== "contracted") return viewWaiting(me);
           return viewClientHome(me).then(function (n) { show(n); });
         };

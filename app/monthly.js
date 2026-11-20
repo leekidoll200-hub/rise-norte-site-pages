@@ -1,4 +1,4 @@
-/* 도장판 끝의 ‘이달에 챙길 것’. scripts/build_monthly.py 가 docs/캐릭터_사업/달마다_챙길_것.md 에서 만든다 → 직접 고치지 않는다.
+/* 도장판 끝의 ‘이달에 챙길 것’. scripts/build_monthly.py 가 rise-norte-character/docs/달마다_챙길_것.md 에서 만든다 → 직접 고치지 않는다.
    확인 칸이 [확인]인 줄만 들어 있다(검색으로 본 것 · 공식 사이트와의 마지막 대조는 싣기 직전에 한 번 더 필요).
    날짜를 알려 줄 뿐 세금을 계산하거나 신고를 대신하지 않는다. 금융상품 이름은 없다.
    who: pay 월급 · side 직장+부수입 · biz 사업 · 프리랜서 · 부수입 · free 프리랜서 · vat 일반과세(모름 포함) · local 지역가입자 · own 내 집 · rent 월세 · car 차 · all 모두 */
