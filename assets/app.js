@@ -348,8 +348,13 @@
       if (window.RN_TRACK) window.RN_TRACK("share", { view: r.key });
       function copied() { shared.textContent = "주소를 복사했습니다. 카카오톡이나 문자에 붙여 넣어 보내세요."; shared.hidden = false; }
       function manual() { shared.textContent = "이 주소를 길게 눌러 복사해 보내세요: " + url; shared.hidden = false; }
-      if (navigator.share) { navigator.share({ title: "내 안의 돈독귀신 테스트", text: text, url: url }).then(null, function () {}); return; }
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + " " + url).then(copied, manual); else manual();
+      var kakao = window.RN_KAKAO_SHARE ? window.RN_KAKAO_SHARE({ title: "내 안의 돈독귀신 테스트", text: text, url: url,
+        image: new URL("assets/icons/icon_512.png", location.href).href }) : Promise.resolve(false);
+      kakao.then(function (ok) {            // 카카오톡 공유 창이 안 되면 휴대폰 공유 창, 그것도 없으면 주소 복사
+        if (ok) return;
+        if (navigator.share) { navigator.share({ title: "내 안의 돈독귀신 테스트", text: text, url: url }).then(null, function () {}); return; }
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + " " + url).then(copied, manual); else manual();
+      });
     });
     acts.appendChild(go); acts.appendChild(share); acts.appendChild(shared); acts.appendChild(again);
     box.appendChild(acts);

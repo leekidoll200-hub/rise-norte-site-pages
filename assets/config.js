@@ -16,5 +16,10 @@ window.RN_CONFIG = {
   // 관리자 키(service_role · secret)와 데이터베이스 비밀번호는 절대 이 파일 · 저장소에 넣지 않는다.
   // 누가 무엇을 볼 수 있는지는 데이터베이스 권한(RLS)이 막는다 → supabase/schema_draft.sql
   supabaseUrl: "https://cyghwusriftgqbaonywd.supabase.co",
-  supabaseKey: "sb_publishable_QgeW8-4Vu_DVjm5orJzMFg_R8ExV-4Q"
+  supabaseKey: "sb_publishable_QgeW8-4Vu_DVjm5orJzMFg_R8ExV-4Q",
+
+  // 카카오톡 공유(‘친구에게 보내기’를 누르면 카카오톡 공유 창이 바로 뜬다)에 쓰는 ‘JavaScript 키’.
+  // 카카오 개발자 사이트 > 내 애플리케이션 > 앱 키에서 본다. 공개해도 되는 키다(REST API 키 · Admin 키 · Client Secret 은 절대 넣지 않는다).
+  // 같은 곳의 ‘JavaScript SDK 도메인’에 사이트 주소를 등록해야 동작한다. 비어 있으면 휴대폰 공유 창 · 주소 복사로 넘어간다.
+  kakaoJsKey: "cf81cb5b5e6d23e0316d1d838f8568dd"
 };

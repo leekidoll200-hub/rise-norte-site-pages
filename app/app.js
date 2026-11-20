@@ -639,8 +639,13 @@
           guide(PAY.friend),
           el("button", { class: "btn btn-main btn-wide", type: "button", text: "돈깨비를 친구에게 보내기", onclick: function () {
             var text = "내 안의 돈독귀신 테스트래. 너는 어떤 귀신이 나와? " + url.href;
-            if (navigator.share) navigator.share({ title: "내 안의 돈독귀신 테스트", text: "내 안의 돈독귀신 테스트래. 너는 어떤 귀신이 나와?", url: url.href }).then(null, function () {});
-            else copyText(text, function () { tell("주소를 복사했습니다. 카카오톡이나 문자에 붙여 넣어 보내세요."); });
+            var kakao = window.RN_KAKAO_SHARE ? window.RN_KAKAO_SHARE({ title: "내 안의 돈독귀신 테스트", text: "내 안의 돈독귀신 테스트래. 너는 어떤 귀신이 나와?", url: url.href,
+              image: new URL("../assets/icons/icon_512.png", location.href).href }) : Promise.resolve(false);
+            kakao.then(function (ok) {      // 카카오톡 공유 창이 안 되면 휴대폰 공유 창, 그것도 없으면 주소 복사
+              if (ok) return;
+              if (navigator.share) navigator.share({ title: "내 안의 돈독귀신 테스트", text: "내 안의 돈독귀신 테스트래. 너는 어떤 귀신이 나와?", url: url.href }).then(null, function () {});
+              else copyText(text, function () { tell("주소를 복사했습니다. 카카오톡이나 문자에 붙여 넣어 보내세요."); });
+            });
           } }),
           el("p", { class: "src", text: "주소에는 이름이나 연락처가 들어가지 않습니다." })]);
       }
