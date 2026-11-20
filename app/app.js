@@ -854,7 +854,9 @@
     function pickTab(t) { tab = t; drawTabs(); window.scrollTo(0, 0); go(); }   // 탭을 바꾸면 맨 위에서 시작
     function list() {
       return Promise.all([rest("GET", "profiles?select=*&order=created_at.desc"), rest("GET", "worksheets?select=id,client_id,steps_done,updated_at,submitted_at&order=updated_at.desc"),
-        rest("GET", "consents?select=client_id,decided_at,signer_name&kind=eq.commission&agreed=is.true&text_version=eq." + AGREE_VERSION + "&order=decided_at.desc")]).then(function (res) {
+        rest("GET", "consents?select=client_id,decided_at,signer_name&kind=eq.commission&agreed=is.true&text_version=eq." + AGREE_VERSION + "&order=decided_at.desc"),
+        rest("GET", "bookings?select=phone,status")]).then(function (res) {
+        var booked = {}; res[3].forEach(function (b) { if (b.status === "cancelled") return; var d = String(b.phone || "").replace(/\D/g, ""); booked[d] = (booked[d] || 0) + 1; });
         var byClient = {}; res[1].forEach(function (w) { if (!byClient[w.client_id]) byClient[w.client_id] = w; });
         var agreed = {}; res[2].forEach(function (c) { if (!agreed[c.client_id]) agreed[c.client_id] = c; });
         var rows = res[0].map(function (p) {
@@ -864,6 +866,7 @@
           sel.value = p.status;
           return el("tr", {}, [
             el("td", { text: (p.display_name || "(이름 없음)") + (p.role === "advisor" ? " · 담당자" : "") }),
+            el("td", { text: p.phone ? String(p.phone).replace(/\D/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") + (booked[String(p.phone).replace(/\D/g, "")] ? " · 신청 " + booked[String(p.phone).replace(/\D/g, "")] + "건" : "") : "—" }),
             el("td", {}, [sel]),
             el("td", { text: agreed[p.id] ? stamp(agreed[p.id].decided_at) + (agreed[p.id].signer_name ? " · " + agreed[p.id].signer_name : "") : "—" }),
             el("td", { text: w ? n + "/" + STEPS.length + (w.submitted_at ? " · 제출" : "") : "아직 없음" }),
@@ -873,7 +876,7 @@
           ]);
         });
         return el("section", {}, [el("h1", { text: "고객 목록", style: "margin-bottom:16px" }), el("div", { class: "table-wrap" }, [el("table", { class: "clients" }, [
-          el("thead", {}, [el("tr", {}, ["이름", "상태", "상담 동의", "작성지", "마지막 저장", ""].map(function (h) { return el("th", { text: h }); }))]), el("tbody", {}, rows)])]),
+          el("thead", {}, [el("tr", {}, ["이름", "연락처 · 상담 신청", "상태", "상담 동의", "작성지", "마지막 저장", ""].map(function (h) { return el("th", { text: h }); }))]), el("tbody", {}, rows)])]),
           el("p", { class: "src", text: "‘계약 고객’으로 바꾸면 그 고객이 상담 동의 · 후기 작성 · 사전 작성지를 쓸 수 있습니다. 고객이 카카오로 한 번 로그인해야 이 목록에 나타납니다. 화면에 고객 이름이 보이니 다른 사람이 보는 곳에서는 열지 마세요." })]);
       });
     }
@@ -1164,9 +1167,19 @@
     return Promise.all([
       rest("GET", "bookings?select=*&order=starts_at.asc.nullslast,created_at.desc"),
       rest("GET", "blocks?select=*&ends_at=gte." + encodeURIComponent(nowIso) + "&order=starts_at"),
-      rest("GET", "open_rule?select=*&id=eq.1")
+      rest("GET", "open_rule?select=*&id=eq.1"),
+      rest("GET", "profiles?select=id,display_name,phone,status")
     ]).then(function (res) {
       var bookings = res[0], blocks = res[1], rule = (res[2] && res[2][0]) || {};
+      // 상담 신청(로그인 없음)과 카카오 로그인 계정을 휴대폰 번호로 잇는다 (가입 정보 · 사전 작성지에 적은 번호)
+      var byPhone = {};
+      (res[3] || []).forEach(function (p) { var d = String(p.phone || "").replace(/\D/g, ""); if (d && !byPhone[d]) byPhone[d] = p; });
+      function account(b) {
+        var p = byPhone[String(b.phone || "").replace(/\D/g, "")];
+        if (!p) return "아직 로그인 안 함";
+        var st = STATUS.filter(function (s) { return s[0] === p.status; })[0];
+        return (p.display_name || "(이름 없음)") + " · " + (st ? st[1] : p.status);
+      }
       var msg = el("p", { class: "msg bad", hidden: true });
       function oops(e) { msg.textContent = e.message; msg.hidden = false; msg.scrollIntoView({ block: "center" }); }
       var today = KST_KEY.format(new Date());
@@ -1182,7 +1195,8 @@
           el("dt", { text: "관심 주제" }), el("dd", { text: (b.topics || []).join(" · ") || "—" }),
           b.check_result ? el("dt", { text: "자가 점검" }) : null, b.check_result ? el("dd", { text: b.check_result }) : null,
           el("dt", { text: "만난 경로" }), el("dd", { text: b.channel || "—" }),
-          el("dt", { text: "신청한 때" }), el("dd", { text: stamp(b.created_at) })
+          el("dt", { text: "신청한 때" }), el("dd", { text: stamp(b.created_at) }),
+          el("dt", { text: "로그인 계정" }), el("dd", { text: account(b) })
         ]);
       }
       function setStatus(b, st) { return function () { rest("PATCH", "bookings?id=eq." + b.id, { status: st }).then(reload, oops); }; }
