@@ -21,5 +21,9 @@ window.RN_CONFIG = {
   // 카카오톡 공유(‘친구에게 보내기’를 누르면 카카오톡 공유 창이 바로 뜬다)에 쓰는 ‘JavaScript 키’.
   // 카카오 개발자 사이트 > 내 애플리케이션 > 앱 키에서 본다. 공개해도 되는 키다(REST API 키 · Admin 키 · Client Secret 은 절대 넣지 않는다).
   // 같은 곳의 ‘JavaScript SDK 도메인’에 사이트 주소를 등록해야 동작한다. 비어 있으면 휴대폰 공유 창 · 주소 복사로 넘어간다.
-  kakaoJsKey: "cf81cb5b5e6d23e0316d1d838f8568dd"
+  kakaoJsKey: "cf81cb5b5e6d23e0316d1d838f8568dd",
+
+  // 월급날 앱 알림(웹 푸시)의 공개키(VAPID public key · 공개해도 되는 값). 짝이 되는 개인키는 Supabase Edge Function Secrets(VAPID_KEYS)에만 있다.
+  // 2026-11-20 scripts/vapid_keys.html로 만듦. 열쇠를 바꾸면 이 값도 바꾸고, 이미 알림을 켠 고객은 다시 켜야 한다. 계획: docs/plan.md
+  vapidPublicKey: "BLgSFZJn0vD1GEVEQ0SVQqRIeFaehKvThBAzHZrsEOL4ouM94Cw2Lnsha4NTteDrnEmY15sHN1CTL5EL44y6hU4"
 };

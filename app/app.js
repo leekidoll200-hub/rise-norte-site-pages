@@ -437,7 +437,7 @@
   }
 
   /* ---------- 화면: 상담 확인 · 동의 (계약 고객 · 문구 기준은 도구함 양식 14) ---------- */
-  var AGREE_VERSION = "contract-2026-11-20";   // 2026-11-20: 월급날 관리 항목(월급날 날짜 · 다달이 확인한 결과 · 소개 주소의 코드)을 넣음
+  var AGREE_VERSION = "contract-2026-11-20b";  // 2026-11-20: 월급날 관리 항목(월급날 날짜 · 다달이 확인한 결과 · 소개 주소의 코드)을 넣음 · b: 앱 알림 항목(알림 주소 · 기기 종류)을 넣음
   function agreementText() {
     return [
       el("h2", { text: "1 상담 범위" }),
@@ -454,7 +454,7 @@
       el("dl", { class: "kv" }, [
         el("dt", { text: "처리하는 곳" }), el("dd", { text: "라이즈 노르테 · 대표 이승준" }),
         el("dt", { text: "목적" }), el("dd", { text: "재무설계 상담, 이후 자산관리(정기 점검 · 자산관리에 필요한 금융상품과 서비스 제안), 서비스 개선과 통계" }),
-        el("dt", { text: "항목" }), el("dd", { text: "이름 · 연락처 · 주소 · 이메일 · 생년월일 · 직업 · 가족 상황 · 소득 · 지출 · 자산 · 부채 · 보험 가입 내역 · 투자성향 · 보내 주신 자료(급여명세서 · 원천징수영수증 · 종합소득세 신고서 · 연말정산 서류 · 국민연금 예상액 등) · 이 화면에서 고르신 내 상황(일하는 형태 · 건강보험 가입 형태 · 부가가치세 유형 · 사는 집 · 차 · 함께 챙기는 가족)과 월급날 관리 기록(월급날 날짜 · 다달이 확인한 네 자리 결과와 남기신 말 · 알림을 켜고 끈 때 · ‘친구에게 보내기’ 주소의 코드)" }),
+        el("dt", { text: "항목" }), el("dd", { text: "이름 · 연락처 · 주소 · 이메일 · 생년월일 · 직업 · 가족 상황 · 소득 · 지출 · 자산 · 부채 · 보험 가입 내역 · 투자성향 · 보내 주신 자료(급여명세서 · 원천징수영수증 · 종합소득세 신고서 · 연말정산 서류 · 국민연금 예상액 등) · 이 화면에서 고르신 내 상황(일하는 형태 · 건강보험 가입 형태 · 부가가치세 유형 · 사는 집 · 차 · 함께 챙기는 가족)과 월급날 관리 기록(월급날 날짜 · 다달이 확인한 네 자리 결과와 남기신 말 · 알림을 켜고 끈 때 · ‘친구에게 보내기’ 주소의 코드)과, 앱 알림을 켜면 그 휴대폰의 알림 주소와 기기 종류" }),
         el("dt", { text: "보관 기간" }), el("dd", { text: "자산관리를 그만두겠다고 하실 때까지 보관하고, 그때 바로 지웁니다" }),
         el("dt", { text: "거부할 권리" }), el("dd", { text: "동의하지 않으실 수 있습니다. 다만 이 경우 재무설계 상담과 정기 점검은 진행하기 어렵습니다" })
       ]),
@@ -557,7 +557,7 @@
 
 
   /* ---------- 홈 화면에 깔기(설치형 웹앱) ----------
-     설계: rise-norte-character/docs/관리_기능_설계.md 1번. 깔면 주소창 없이 앱처럼 열린다. 알림 보내기는 아직 만들지 않았다.
+     설계: rise-norte-character/docs/관리_기능_설계.md 1번. 깔면 주소창 없이 앱처럼 열린다. 아이폰은 깔아야 앱 알림을 받는다(아래 ‘앱 알림’).
      아이폰은 사파리에서만, 안드로이드는 크롬 등에서 된다. 카카오톡 안에서 연 화면에서는 깔 수 없다. */
   var installEvt = null;
   window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); installEvt = e; });
@@ -583,10 +583,72 @@
     return box;
   }
 
+  /* ---------- 앱 알림(웹 푸시) ----------
+     계획: docs/plan.md 3단계. 이 기기를 Supabase push_subs 에 등록하면 월급날 08:30 에 서버(send-push)가 보낸다.
+     아이폰은 홈 화면에 깐 앱에서만 · 카카오톡 같은 앱 안 브라우저는 안 된다. 받을 수 없는 기기는 담당자가 카카오톡으로 보낸다.
+     허락 창은 ‘저장’ 단추를 누른 그 순간에 띄워야 한다(아이폰은 단추를 누른 직후가 아니면 창을 띄우지 않는다). */
+  function swReady() {
+    if (!("serviceWorker" in navigator)) return Promise.reject(new Error("no sw"));
+    return navigator.serviceWorker.register("sw.js").then(function () { return navigator.serviceWorker.ready; });
+  }
+  function deviceKind() { var ua = navigator.userAgent || ""; return /iPhone|iPad|iPod/.test(ua) ? "ios" : /Android/.test(ua) ? "android" : "other"; }
+  // ok: 켤 수 있음 · inapp: 앱 안 브라우저 · ios-install: 아이폰인데 홈 화면 앱이 아님 · denied: 알림을 막아 둠 · unsupported: 이 브라우저는 안 됨 · nokey: 설정 빠짐
+  function pushState() {
+    var ua = navigator.userAgent || "";
+    if (/KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\//i.test(ua)) return "inapp";
+    if (deviceKind() === "ios" && !isInstalled()) return "ios-install";
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
+    if (!CFG.vapidPublicKey) return "nokey";
+    if (Notification.permission === "denied") return "denied";
+    return "ok";
+  }
+  var PUSH_NOTE = {
+    "inapp": "지금은 카카오톡 같은 앱 안에서 열린 화면이라 앱 알림을 켤 수 없습니다. 사파리나 크롬으로 열어 주세요. 그 전까지는 담당 자산관리사가 카카오톡으로 보내 드립니다.",
+    "ios-install": "아이폰은 홈 화면에 깐 돈깨비 앱에서만 알림을 받을 수 있습니다. 아래 안내대로 먼저 깐 뒤, 홈 화면의 돈깨비에서 다시 저장해 주세요. 그 전까지는 담당 자산관리사가 카카오톡으로 보내 드립니다.",
+    "unsupported": "이 브라우저는 앱 알림을 받을 수 없습니다. 켜 두면 담당 자산관리사가 카카오톡으로 보내 드립니다.",
+    "nokey": "앱 알림 설정이 아직 끝나지 않았습니다. 켜 두면 담당 자산관리사가 카카오톡으로 보내 드립니다.",
+    "denied": "이 휴대폰에서 돈깨비 알림을 막아 두셨습니다. 휴대폰 설정 → 알림에서 돈깨비(또는 쓰는 브라우저)를 허용한 뒤 다시 저장해 주세요. 그 전까지는 담당 자산관리사가 카카오톡으로 보내 드립니다."
+  };
+  function b64urlBytes(s) {
+    var b = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), out = new Uint8Array(b.length);
+    for (var i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
+    return out;
+  }
+  // 허락 받기 → 이 기기 구독 → 서버에 등록. 돌려주는 값: "on"(앱 알림 받음) · "denied" · "fail"
+  function pushTurnOn(permission) {
+    return permission.then(function (p) {
+      if (p !== "granted") return "denied";
+      return swReady().then(function (reg) {
+        return reg.pushManager.getSubscription().then(function (s) {
+          return s || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlBytes(CFG.vapidPublicKey) });
+        });
+      }).then(function (s) {
+        var j = s.toJSON();
+        return rest("POST", "rpc/push_subscribe", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_device: deviceKind() });
+      }).then(function () { return "on"; }, function () { return "fail"; });
+    });
+  }
+  function pushTurnOff() {      // 서버 쪽 줄은 알림을 끌 때 데이터베이스가 지운다(010 care_push_cleanup). 여기서는 이 기기 구독만 푼다.
+    if (!("serviceWorker" in navigator)) return Promise.resolve();
+    return navigator.serviceWorker.getRegistration().then(function (reg) {
+      return reg && reg.pushManager ? reg.pushManager.getSubscription().then(function (s) { return s && s.unsubscribe(); }) : null;
+    }).then(null, function () { /* 넘어간다 */ });
+  }
+  // 이 기기가 지금 앱 알림을 받는 중인지: 기기 구독이 있고, 서버에도 같은 주소가 있으면 true
+  function pushThisDevice() {
+    if (pushState() !== "ok" || Notification.permission !== "granted") return Promise.resolve(false);
+    return navigator.serviceWorker.getRegistration().then(function (reg) {
+      return reg && reg.pushManager ? reg.pushManager.getSubscription() : null;
+    }).then(function (s) {
+      if (!s) return false;
+      return rest("GET", "push_subs?select=endpoint&endpoint=eq." + encodeURIComponent(s.endpoint)).then(function (rows) { return rows.length > 0; });
+    }).then(null, function () { return false; });
+  }
+
   /* ---------- 화면: 월급날 도장판 · 설정 (계약 고객) ----------
      설계: rise-norte-character/docs/월급날_돈깨비.md. 대사는 app/payday.js.
      알림은 따로 동의서를 받지 않고 ‘설정’에서 켜고 끈다(사용자 2026-11-20). 받는 정보는 상담 확인 · 동의서 3번에 적혀 있다.
-     고객에게 자동으로 보내는 것은 없다. 월급날 아침에 담당자에게만 알림이 가고, 담당자가 카카오톡으로 직접 보낸다. */
+     월급날 아침 08:30 에 앱 알림을 켠 기기로 자동 알림이 간다(2026-11-20 · 010_push.sql). 앱 알림이 없는 고객은 담당자가 카카오톡으로 직접 보낸다. */
   var PAY = window.RN_PAYDAY || null, payAgain = false;
   var GHOST_IMG = { dalkom: "../assets/ghost_dalkom.webp", jiltu: "../assets/ghost_jiltu.webp", buran: "../assets/ghost_buran.webp", tamyok: "../assets/ghost_tamyok.webp", dondok: "../assets/dondok.webp" };
   function seoulToday() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }   // 2026-11-20
@@ -718,18 +780,37 @@
       day.value = care.payday ? String(care.payday) : "";
       var on = el("input", { type: "checkbox", checked: !!care.notify });
       var err = el("p", { class: "msg bad", hidden: true });
+      var st = pushState();
+      var devLine = el("p", { class: "msg", hidden: true });
+      if (care.notify) pushThisDevice().then(function (yes) {
+        devLine.textContent = yes ? "이 휴대폰으로 월급날 앱 알림을 받는 중입니다."
+          : st === "ok" ? "이 휴대폰은 아직 앱 알림에 등록되지 않았습니다. ‘설정 저장’을 누르면 알림 허용 창이 뜹니다."
+          : PUSH_NOTE[st];
+        devLine.hidden = false;
+      });
       var btn = el("button", { class: "btn btn-main btn-wide", type: "button", text: "설정 저장", onclick: function () {
         if (on.checked && !day.value) { err.textContent = "알림을 받으려면 월급날을 골라 주세요."; err.hidden = false; return; }
+        var wantOn = on.checked;
+        // 허락 창은 단추를 누른 바로 이 순간에 띄운다(뒤로 미루면 아이폰이 창을 막는다).
+        var perm = wantOn && st === "ok" ? (Notification.permission === "granted" ? Promise.resolve("granted") : Promise.resolve(Notification.requestPermission())) : null;
         btn.disabled = true;
-        rest("POST", "rpc/set_my_care", { p_payday: day.value ? Number(day.value) : null, p_notify: on.checked })
-          .then(function () { reload("설정을 저장했습니다."); }, function (e) { btn.disabled = false; err.textContent = e.message; err.hidden = false; });
+        rest("POST", "rpc/set_my_care", { p_payday: day.value ? Number(day.value) : null, p_notify: wantOn })
+          .then(function () { return !wantOn ? pushTurnOff().then(function () { return "off"; }) : perm ? pushTurnOn(perm) : st; })
+          .then(function (r) {
+            reload(r === "off" ? "설정을 저장했습니다."
+              : r === "on" ? "설정을 저장했습니다. 월급날 아침 8시 30분에 이 휴대폰으로 돈깨비 알림이 갑니다."
+              : r === "denied" ? "설정을 저장했습니다. 알림을 허용하지 않으셔서, 월급날 안내는 담당 자산관리사가 카카오톡으로 보내 드립니다."
+              : r === "fail" ? "설정은 저장했지만 이 휴대폰을 앱 알림에 등록하지 못했습니다. 잠시 뒤 다시 저장해 주세요. 그 전까지는 카카오톡으로 보내 드립니다."
+              : "설정을 저장했습니다. " + (PUSH_NOTE[r] || ""));
+          }, function (e) { btn.disabled = false; err.textContent = e.message; err.hidden = false; });
       } });
       return el("section", { class: "panel" }, [
         el("h1", { text: "설정" }),
         el("div", { class: "wide" }, [el("label", { text: "월급날" }), day]),
-        el("label", { class: "agree" }, [on, el("span", { text: "월급날에 카카오톡으로 도장판 안내 받기" })]),
-        el("p", { class: "src", text: "켜 두면 다달이 월급날에 담당 자산관리사가 카카오톡으로 안내를 보내 드립니다. 안내만 보내고 광고는 보내지 않습니다. 언제든 여기서 끌 수 있습니다."
+        el("label", { class: "agree" }, [on, el("span", { text: "월급날 아침에 도장판 안내 받기" })]),
+        el("p", { class: "src", text: "켜 두면 월급날 아침 8시 30분에 이 휴대폰으로 돈깨비 알림이 갑니다. 처음 켤 때 휴대폰이 알림을 허용할지 묻습니다. ‘허용’을 눌러 주세요. 앱 알림을 받을 수 없는 휴대폰이면 담당 자산관리사가 카카오톡으로 보내 드립니다. 안내만 보내고 광고는 보내지 않습니다. 언제든 여기서 끌 수 있고, 끄면 이 휴대폰의 알림 등록도 지웁니다."
           + (care.notify_at ? " 마지막으로 바꾼 때: " + stamp(care.notify_at) : "") }),
+        st !== "ok" ? el("p", { class: "msg", text: PUSH_NOTE[st] }) : devLine,
         err, btn,
         el("button", { class: "link-btn", type: "button", text: "내 상황(일하는 형태 · 건강보험 · 집 · 차 · 가족) 고치기", onclick: function () { reload(null, true); } }),
         installGuide(true)]);
@@ -881,6 +962,25 @@
       });
     }
 
+    /* 내 휴대폰으로 시험 알림: 이 기기를 등록(담당자도 push_subscribe 가능)한 뒤 push_test()로 내 기기에만 보낸다. */
+    function pushTestBox() {
+      var st = pushState(), out = el("p", { class: "msg", hidden: true });
+      var btn = el("button", { class: "btn btn-main", type: "button", text: "이 휴대폰으로 시험 알림 보내기", onclick: function () {
+        if (st !== "ok") { out.textContent = PUSH_NOTE[st]; out.hidden = false; return; }
+        var perm = Notification.permission === "granted" ? Promise.resolve("granted") : Promise.resolve(Notification.requestPermission());   // 누른 순간에 허락 창
+        btn.disabled = true; out.hidden = true;
+        pushTurnOn(perm).then(function (r) {
+          if (r !== "on") throw new Error(r === "denied" ? "알림을 허용하지 않아 보낼 수 없습니다. 휴대폰 설정 → 알림에서 허용해 주세요." : "이 휴대폰을 등록하지 못했습니다. 잠시 뒤 다시 눌러 주세요.");
+          return rest("POST", "rpc/push_test", {});
+        }).then(function (n) {
+          out.textContent = n > 0 ? "보냈습니다(기기 " + n + "대). 1분 안에 알림이 오는지, 누르면 도장판 화면이 열리는지 확인해 주세요." : "보낼 기기가 없습니다. 잠시 뒤 다시 눌러 주세요.";
+        }, function (e) { out.textContent = e.message; }).then(function () { out.hidden = false; btn.disabled = false; });
+      } });
+      return el("div", { class: "panel" }, [el("h2", { text: "앱 알림 시험" }),
+        el("p", { class: "muted", text: "이 휴대폰을 앱 알림에 등록하고, 고객에게 가는 것과 같은 길로 시험 알림을 보냅니다. 아이폰은 홈 화면에 깐 돈깨비에서 눌러야 합니다." }),
+        st !== "ok" ? el("p", { class: "msg", text: PUSH_NOTE[st] }) : null, btn, out]);
+    }
+
     /* ---------- 월급날 · 소개: 오늘 월급날인 고객 · 이번 달 도장 · 약속 적기 · 소개 표 ---------- */
     function paydayView() {
       var today = seoulToday(), ym = today.slice(0, 7), mon = Number(today.slice(5, 7)), dayNow = Number(today.slice(8, 10));
@@ -891,14 +991,17 @@
         rest("GET", "profiles?select=id,display_name,status,role&status=eq.contracted&order=created_at.desc"),
         rest("GET", "care?select=*"),
         rest("GET", "stamps?select=*&order=month.desc&limit=400"),
-        rest("POST", "rpc/referrals", {}).then(null, function () { return null; })      // 통계 SQL(008)이 아직이면 비워 둔다
+        rest("POST", "rpc/referrals", {}).then(null, function () { return null; }),      // 통계 SQL(008)이 아직이면 비워 둔다
+        rest("POST", "rpc/push_counts", {}).then(null, function () { return null; })     // 고객별 앱 알림 기기 수(010) · 기기 주소는 오지 않는다
       ]).then(function (res) {
+        var pushBy = {}, pushKnown = res[4] !== null; (res[4] || []).forEach(function (x) { pushBy[x.client_id] = x.devices; });
         var careBy = {}; (res[1] || []).forEach(function (c) { careBy[c.client_id] = c; });
         var stampsBy = {}; (res[2] || []).forEach(function (s) { (stampsBy[s.client_id] = stampsBy[s.client_id] || []).push(s); });
         var due = [], rows = (res[0] || []).map(function (p) {
           var c = careBy[p.id] || {}, st = stampsBy[p.id] || [], cur = st.filter(function (s) { return s.month.slice(0, 7) === ym; })[0];
           var isToday = c.notify && c.payday && Math.min(c.payday, lastDay) === dayNow;
-          if (isToday) due.push(p.display_name || "(이름 없음)");
+          var viaApp = !!pushBy[p.id];
+          if (isToday) due.push((p.display_name || "(이름 없음)") + (!pushKnown ? "" : viaApp ? "(앱 알림)" : "(카카오톡)"));
           var two = st.length >= 2 ? PAY.seats.filter(function (s) { return st[0].kept[s.key] === false && st[1].kept[s.key] === false; }).map(function (s) { return s.seat; }) : [];
           var dayIn = el("input", { type: "number", min: "1", max: "31", value: c.payday || "", "aria-label": "월급날", style: "width:5em" });
           var ins = {}; PAY.seats.forEach(function (s) { ins[s.key] = el("input", { type: "text", maxlength: "60", value: (c.promise || {})[s.key] || "", placeholder: "예) 한 달 ○○만 원까지 (상품 이름은 적지 않습니다)", "aria-label": s.seat + " 약속" }); });
@@ -917,10 +1020,10 @@
           return el("tr", {}, [
             el("td", { text: (p.display_name || "(이름 없음)") + (isToday ? " · 오늘 월급날" : "") }),
             el("td", { text: c.payday ? (c.payday === 31 ? "말일" : c.payday + "일") : "—" }),
-            el("td", { text: c.notify ? "켬" : "끔" }),
+            el("td", { text: !c.notify ? "끔" : !pushKnown ? "켬" : viaApp ? "앱 알림" : "카카오톡" }),
             el("td", { text: cur ? "찍음 · 지킨 자리 " + PAY.seats.filter(function (s) { return cur.kept[s.key]; }).length + "곳" : "아직" }),
             el("td", { text: (cur && cur.note ? "한 줄: " + cur.note : "") + (two.length ? (cur && cur.note ? " / " : "") + "두 달째 못 지킴: " + two.join(" · ") : "") || "—" }),
-            el("td", {}, [c.notify ? el("button", { class: "link-btn", type: "button", text: "알림 문구 복사", onclick: function () { copyText(msg, function () { tell("복사했습니다. 카카오톡에 붙여 넣어 보내세요.\n\n" + msg); }); } }) : null, edit])
+            el("td", {}, [c.notify && !viaApp ? el("button", { class: "link-btn", type: "button", text: "알림 문구 복사", onclick: function () { copyText(msg, function () { tell("복사했습니다. 카카오톡에 붙여 넣어 보내세요.\n\n" + msg); }); } }) : null, edit])
           ]);
         });
         var refs = res[3];
@@ -930,7 +1033,8 @@
           el("div", { class: "table-wrap" }, [el("table", { class: "clients" }, [
             el("thead", {}, [el("tr", {}, ["이름", "월급날", "알림", mon + "월 도장", "살필 것", ""].map(function (h) { return el("th", { text: h }); }))]),
             el("tbody", {}, rows.length ? rows : [el("tr", {}, [el("td", { colspan: "6", text: "계약 고객이 아직 없습니다." })])])])]),
-          el("p", { class: "src", text: "알림은 고객이 자기 화면의 ‘설정’에서 켜고 끕니다. 켠 고객에게만 보내세요. 자동으로 나가는 것은 없고, 월급날 아침 8시 30분에 담당자 휴대폰으로 ‘오늘 월급날 고객 n명’만 옵니다. 다달이 보내는 연락과 소개 답례는 소속 회사 규정을 먼저 확인하세요(확인 필요)." }),
+          el("p", { class: "src", text: "알림은 고객이 자기 화면의 ‘설정’에서 켜고 끕니다. 알림 칸이 ‘앱 알림’인 고객은 월급날 아침 8시 30분에 휴대폰으로 자동 알림이 갑니다. ‘카카오톡’인 고객(앱 알림을 못 받는 휴대폰)에게만 ‘알림 문구 복사’로 직접 보내세요. 같은 시각 담당자 휴대폰(ntfy)으로 ‘앱 알림 n명 · 카카오톡 m명’이 옵니다. 다달이 보내는 연락과 소개 답례는 소속 회사 규정을 먼저 확인하세요(확인 필요)." }),
+          pushTestBox(),
           el("div", { class: "panel" }, [el("h2", { text: "소개" }), el("p", { class: "muted", text: "고객의 ‘친구에게 보내기’ 주소로 들어온 방문 · 테스트를 끝낸 방문 · 상담 신청 수입니다." }),
             refs === null ? el("p", { class: "msg", text: "방문 통계가 아직 켜지지 않아 셀 수 없습니다." })
               : el("div", { class: "table-wrap" }, [el("table", { class: "clients" }, [
